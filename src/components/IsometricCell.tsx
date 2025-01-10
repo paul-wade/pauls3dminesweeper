@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useRef, useState } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, ThreeEvent } from '@react-three/fiber';
 import { Text } from '@react-three/drei';
 import * as THREE from 'three';
 import { Flag } from './Flag';
@@ -104,7 +104,7 @@ interface Props {
   flagged: boolean;
   hasMine: boolean;
   onClick: () => void;
-  onContextMenu: (e: THREE.Event<MouseEvent>) => void;
+  onContextMenu: (e: ThreeEvent<MouseEvent>) => void;
   gameOver: boolean;
   bombHitPosition?: { x: number, y: number };
   boardPosition: { x: number, y: number };

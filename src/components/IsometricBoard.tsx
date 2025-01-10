@@ -38,7 +38,7 @@ import {
   FaGithub, 
   FaLinkedin 
 } from 'react-icons/fa';
-import { Canvas } from '@react-three/fiber';
+import { Canvas, ThreeEvent } from '@react-three/fiber';
 import { Center, OrbitControls } from '@react-three/drei';
 import IsometricCell from './IsometricCell';
 import * as THREE from 'three';
@@ -341,7 +341,7 @@ const IsometricBoard: React.FC<Props> = ({
     }
   };
 
-  const handleRightClick = (e: THREE.Event<MouseEvent>, x: number, y: number) => {
+  const handleRightClick = (e: ThreeEvent<MouseEvent>, x: number, y: number) => {
     e.nativeEvent?.preventDefault();
     if (gameOver || revealed[y]?.[x] || !board) return;
 
@@ -455,8 +455,8 @@ const IsometricBoard: React.FC<Props> = ({
     const finalScale = Math.max(scaleFactor, 0.4); // Don't let it get smaller than 0.4
 
     return {
-      position: [0, finalHeight, 0],
-      rotation: [-Math.PI/2, 0, 0],
+      position: [0, finalHeight, 0] as [number, number, number],
+      rotation: [-Math.PI/2, 0, 0] as [number, number, number],
       fov: fov,
       scale: finalScale
     };
@@ -625,7 +625,11 @@ const IsometricBoard: React.FC<Props> = ({
             boxShadow="lg"
           >
             <Canvas 
-              camera={getCameraSetup()}
+              camera={{
+                position: cameraSetup.position,
+                rotation: cameraSetup.rotation,
+                fov: cameraSetup.fov
+              }}
               gl={{ antialias: true }}
               style={{ background: '#f5f5f5' }}
               onContextMenu={(e) => e.preventDefault()}

@@ -1,0 +1,16 @@
+{
+  "scores": [
+    {
+      "name": "PRW",
+      "time": 120,
+      "boardSize": "8x8",
+      "date": "2025-01-10T04:09:42.307Z"
+    },
+    {
+      "name": "WWW",
+      "time": 0,
+      "boardSize": "8x8x3",
+      "date": "2025-01-10T04:51:39.545Z"
+    }
+  ]
+}

@@ -4,21 +4,56 @@ A modern take on the classic Minesweeper game, built with React, Next.js, and Th
 
 ## Features
 
-- 🎮 Classic Minesweeper gameplay
-- 🎨 Beautiful 3D isometric design
-- 🎯 Smooth tile reveal animations
-- 💥 Chain-reaction explosion animations
-- 🏆 High score tracking
-- 🎌 American flag markers
-- 📱 Responsive design
+- 🎮 Advanced Game Architecture
+  - Custom game state management system
+  - Efficient board generation algorithm
+  - Recursive flood-fill for tile revealing
+  - Event-driven game mechanics
+- 🎨 3D Graphics & Animation
+  - Three.js-powered isometric rendering
+  - Custom 3D models for mines and flags
+  - Dynamic lighting and shadows
+  - Physics-based explosion animations
+- 🏗️ Modern Web Technologies
+  - Next.js 13 with App Router
+  - React Server Components
+  - TypeScript for type safety
+  - Tailwind CSS for styling
+- 🎯 Performance Optimizations
+  - React Three Fiber for efficient 3D rendering
+  - Optimized component re-renders
+  - Lazy loading of game assets
+  - Memoized game calculations
+- 🏆 Backend Integration
+  - RESTful API for high scores
+  - Persistent data storage
+  - Score validation system
+- 📱 Advanced UI/UX
+  - Responsive 3D viewport
+  - Keyboard and touch controls
+  - Accessibility features
+  - Windows 95/98-inspired design
 
-## Tech Stack
+## Technical Deep Dive
 
-- React
-- Next.js
-- Three.js with React Three Fiber
-- Chakra UI
-- TypeScript
+### 3D Rendering Architecture
+The game uses a sophisticated 3D rendering system built on Three.js and React Three Fiber. Each cell is a custom 3D component with:
+- Dynamic geometry generation
+- Material system with PBR textures
+- Custom shaders for effects
+- Optimized instancing for performance
+
+### Game Logic
+- Custom recursive algorithms for tile revealing
+- Efficient mine placement with guaranteed first-move safety
+- Event-driven architecture for game state management
+- TypeScript interfaces for type-safe game state
+
+### Performance
+- Optimized 3D scene with frustum culling
+- Efficient state updates using React hooks
+- Memoized calculations for board state
+- Lazy-loaded components and assets
 
 ## Getting Started
 
@@ -46,6 +81,43 @@ npm run dev
 - Right click to place/remove a flag
 - The number on a revealed tile shows how many mines are adjacent to it
 - Flag all mines and reveal all safe tiles to win
+
+## Development
+
+### Prerequisites
+- Node.js 18+
+- npm or yarn
+- Basic understanding of 3D graphics concepts
+
+### Development Commands
+```bash
+# Install dependencies with exact versions
+npm ci
+
+# Run development server with hot reload
+npm run dev
+
+# Run type checking
+npm run type-check
+
+# Build for production
+npm run build
+
+# Run tests
+npm run test
+```
+
+### Project Structure
+```
+src/
+├── components/    # React components
+│   ├── 3d/       # Three.js components
+│   └── ui/       # UI components
+├── hooks/        # Custom React hooks
+├── utils/        # Helper functions
+├── types/        # TypeScript definitions
+└── app/          # Next.js 13 app directory
+```
 
 ## License
 

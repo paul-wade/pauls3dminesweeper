@@ -1,101 +1,9 @@
 'use client';
 
-import React, { useRef, useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useFrame, ThreeEvent } from '@react-three/fiber';
 import { Text } from '@react-three/drei';
 import * as THREE from 'three';
-import { Flag } from './Flag';
-import { Mine } from './Mine';
-
-// Global state for flag rotation
-let globalFlagRotation = [4.4, -2.9292, -3.5];
-const setGlobalFlagRotation = (newRotation: number[]) => {
-  globalFlagRotation = newRotation;
-  console.log('Flag rotation:', globalFlagRotation.map(r => r.toFixed(4)));
-};
-
-// Create a single shared flag texture
-const flagTextureCanvas = (() => {
-  if (typeof window === 'undefined') return null;
-  
-  const canvas = document.createElement('canvas');
-  canvas.width = 256;
-  canvas.height = 128;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return null;
-
-  // Stripes
-  for (let i = 0; i < 13; i++) {
-    ctx.fillStyle = i % 2 === 0 ? '#B22234' : '#FFFFFF';
-    ctx.fillRect(0, i * (128/13), 256, 128/13);
-  }
-
-  // Blue canton
-  ctx.fillStyle = '#3C3B6E';
-  ctx.fillRect(0, 0, 102.4, 70);
-
-  // Stars
-  ctx.fillStyle = '#FFFFFF';
-  const starRadius = 2;
-  for (let row = 0; row < 9; row++) {
-    const starsInRow = row % 2 === 0 ? 6 : 5;
-    const startX = row % 2 === 0 ? 9 : 18;
-    for (let col = 0; col < starsInRow; col++) {
-      const x = startX + col * 18;
-      const y = 5 + row * 7;
-      ctx.beginPath();
-      for (let i = 0; i < 5; i++) {
-        const angle = (i * 4 * Math.PI) / 5 - Math.PI / 2;
-        const px = x + Math.cos(angle) * starRadius;
-        const py = y + Math.sin(angle) * starRadius;
-        if (i === 0) ctx.moveTo(px, py);
-        else ctx.lineTo(px, py);
-      }
-      ctx.closePath();
-      ctx.fill();
-    }
-  }
-
-  return canvas;
-})();
-
-// Create a single shared texture
-const flagTexture = (() => {
-  if (!flagTextureCanvas) return null;
-  const texture = new THREE.CanvasTexture(flagTextureCanvas);
-  texture.wrapS = THREE.ClampToEdgeWrapping;
-  texture.wrapT = THREE.ClampToEdgeWrapping;
-  return texture;
-})();
-
-// Add keyboard controls at the module level
-if (typeof window !== 'undefined') {
-  window.addEventListener('keydown', (e: KeyboardEvent) => {
-    const rotationSpeed = 0.1;
-    const [x, y, z] = globalFlagRotation;
-    
-    switch (e.key.toLowerCase()) {
-      case 'w':
-        setGlobalFlagRotation([x + rotationSpeed, y, z]);
-        break;
-      case 's':
-        setGlobalFlagRotation([x - rotationSpeed, y, z]);
-        break;
-      case 'a':
-        setGlobalFlagRotation([x, y + rotationSpeed, z]);
-        break;
-      case 'd':
-        setGlobalFlagRotation([x, y - rotationSpeed, z]);
-        break;
-      case 'q':
-        setGlobalFlagRotation([x, y, z + rotationSpeed]);
-        break;
-      case 'e':
-        setGlobalFlagRotation([x, y, z - rotationSpeed]);
-        break;
-    }
-  });
-}
 
 interface Props {
   position: [number, number, number];
@@ -110,7 +18,18 @@ interface Props {
   boardPosition: { x: number, y: number };
 }
 
-export default function IsometricCell({ position, value, revealed, flagged, hasMine, onClick, onContextMenu, gameOver, bombHitPosition, boardPosition }: Props) {
+export default function IsometricCell({ 
+  position, 
+  value, 
+  revealed, 
+  flagged, 
+  hasMine, 
+  onClick, 
+  onContextMenu, 
+  gameOver, 
+  bombHitPosition, 
+  boardPosition 
+}: Props) {
   const [hovered, setHovered] = useState(false);
   const meshRef = useRef<THREE.Mesh>(null);
   const [spinProgress, setSpinProgress] = useState(0);

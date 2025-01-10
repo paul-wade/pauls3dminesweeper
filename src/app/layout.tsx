@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { Providers } from './providers'
+import './globals.css'
 
 export const metadata: Metadata = {
   title: 'Minesweeper 3D',
@@ -13,7 +14,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>
+      <body style={{ margin: 0, padding: 0, minHeight: '100vh' }}>
         <Providers>
           {children}
         </Providers>

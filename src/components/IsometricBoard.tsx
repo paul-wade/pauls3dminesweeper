@@ -295,17 +295,10 @@ const InstancedCells = React.memo(({
 InstancedCells.displayName = 'InstancedCells';
 
 interface Props {
-  width?: number;
-  height?: number;
-  mines?: number;
-  levels?: number;
-}
-
-interface HighScore {
-  name: string;
-  time: number;
-  boardSize: string;
-  date: string;
+  initialWidth?: number;
+  initialHeight?: number;
+  initialMines?: number;
+  initialLevels?: number;
 }
 
 // Difficulty settings
@@ -315,7 +308,7 @@ const DIFFICULTY_SETTINGS = {
   hard: { width: 24, height: 24, mines: 99 }
 } as const;
 
-export default function IsometricBoard() {
+export default function IsometricBoard({ initialWidth = 8, initialHeight = 8, initialMines = 10, initialLevels = 1 }: Props) {
   const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard'>('easy');
   const settings = DIFFICULTY_SETTINGS[difficulty];
   
@@ -1069,4 +1062,11 @@ export default function IsometricBoard() {
       </Modal>
     </Box>
   );
+}
+
+interface HighScore {
+  name: string;
+  time: number;
+  boardSize: string;
+  date: string;
 }

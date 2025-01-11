@@ -95,7 +95,7 @@ export default function Home() {
                 filter: 'blur(10px)',
               }}
             >
-              <IsometricBoard width={12} height={12} mines={18} levels={3} />
+              <IsometricBoard initialWidth={12} initialHeight={12} initialMines={18} initialLevels={3} />
             </Box>
           </Box>
         </Box>

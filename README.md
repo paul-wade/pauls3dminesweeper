@@ -82,6 +82,15 @@ npm run dev
 - The number on a revealed tile shows how many mines are adjacent to it
 - Flag all mines and reveal all safe tiles to win
 
+### Difficulty Levels
+
+The game offers three difficulty levels:
+- Easy: 8x8 board with 10 mines
+- Medium: 16x16 board with 40 mines
+- Hard: 24x24 board with 99 mines
+
+Each difficulty level automatically adjusts the board scale and camera position for optimal viewing. The game maintains performance through efficient instance rendering, supporting up to 576 cells (24x24) for the hardest difficulty level.
+
 ## Development
 
 ### Prerequisites

@@ -109,8 +109,6 @@ const InstancedCells = React.memo(({
 
     let idx = 0;
     for (let y = 0; y < height; y++) {
-      if (!revealed[y] || !flagged[y] || !board[y]) continue;
-      
       for (let x = 0; x < width; x++) {
         // Position cells with proper spacing
         tempObject.position.set(
@@ -121,7 +119,7 @@ const InstancedCells = React.memo(({
 
         // Scale cells based on hover and revealed state
         const isHovered = idx === hoveredRef.current;
-        const isRevealed = revealed[y][x];
+        const isRevealed = revealed[y]?.[x] || false;
         
         if (isHovered && !isRevealed) {
           tempObject.scale.set(1.05, 1.05, 1.05);
@@ -135,9 +133,9 @@ const InstancedCells = React.memo(({
         // Set cell color based on game state
         let cellColor;
         if (!isRevealed) {
-          cellColor = flagged[y][x] ? '#ffd700' : '#4a90e2';
+          cellColor = flagged[y]?.[x] ? '#ffd700' : '#4a90e2';
         } else {
-          if (board[y][x] === -1) {
+          if (board[y]?.[x] === -1) {
             cellColor = '#ff4444';  // Mine
           } else {
             cellColor = '#ffffff';  // Revealed cell
@@ -191,10 +189,14 @@ const InstancedCells = React.memo(({
     handleCellClick(x, y);
   };
 
-  const handleContextMenu = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.instanceId === undefined) return;
+  const handleContextMenu = (e: ThreeEvent<MouseEvent>) => {
+    if (e.nativeEvent) {
+      e.nativeEvent.preventDefault();
+      e.nativeEvent.stopPropagation();
+    }
+    
+    // Check if the event has instance data
+    if (typeof e.instanceId !== 'number') return;
     
     const x = e.instanceId % width;
     const y = Math.floor(e.instanceId / width);
@@ -205,7 +207,7 @@ const InstancedCells = React.memo(({
     <group>
       <Instances
         ref={instancesRef}
-        limit={width * height}
+        limit={1000} // Increased limit to handle larger boards
         geometry={cellGeometry}
         material={cellMaterial}
         onPointerOver={handlePointerOver}
@@ -438,7 +440,7 @@ export default function IsometricBoard() {
     setBoard(emptyBoard);
     setRevealed(Array(settings.height).fill(null).map(() => Array(settings.width).fill(false)));
     setFlagged(Array(settings.height).fill(null).map(() => Array(settings.width).fill(false)));
-  }, []);
+  }, [difficulty]);
 
   // Format time as MM:SS
   const formatTime = (seconds: number) => {
@@ -633,6 +635,7 @@ export default function IsometricBoard() {
   };
 
   const handleCellRightClick = (e: ThreeEvent<MouseEvent>, x: number, y: number) => {
+    // Always prevent default context menu
     if (e.nativeEvent) {
       e.nativeEvent.preventDefault();
       e.nativeEvent.stopPropagation();
@@ -642,13 +645,15 @@ export default function IsometricBoard() {
     if (x < 0 || x >= width || y < 0 || y >= height) return;
     if (!board[y] || !flagged[y]) return;
 
+    // Don't allow flagging revealed cells or when game is over
     if (gameOver || revealed[y][x]) return;
 
     const now = Date.now();
-    // Debounce clicks
-    if (now - lastClickTime < 100) return;
+    // Reduce debounce time to make it more responsive
+    if (now - lastClickTime < 50) return;
     setLastClickTime(now);
 
+    // Toggle flag state
     const newFlagged = flagged.map(row => [...row]);
     newFlagged[y][x] = !newFlagged[y][x];
     setFlagged(newFlagged);
@@ -703,11 +708,12 @@ export default function IsometricBoard() {
     
     useEffect(() => {
       const maxDimension = Math.max(width, height);
-      const distance = maxDimension * 1.5;
-      const cameraHeight = maxDimension * 1.2;
+      const baseDistance = 20;
+      const distance = baseDistance * (maxDimension / 8);
+      const cameraHeight = distance * 0.8;
       
       camera.position.set(distance, cameraHeight, distance);
-      camera.lookAt(0, 0, 0);
+      camera.lookAt(width / 2 - 0.5, 0, height / 2 - 0.5); // Center on board
       camera.updateProjectionMatrix();
     }, [camera, width, height]);
 
@@ -831,15 +837,7 @@ export default function IsometricBoard() {
           preset="rembrandt"
           adjustCamera={false}
         >
-          <PerspectiveCamera
-            makeDefault
-            position={[20, 20, 20]}
-            fov={50}
-            near={0.1}
-            far={1000}
-          />
-
-          {/* Game Title and Info */}
+          {/* Game Title */}
           <group position={[0, 12, -12]}>
             <Float
               speed={2}
@@ -908,74 +906,44 @@ export default function IsometricBoard() {
           </group>
 
           {/* Game Stats */}
-          <group position={[0, 4, -10]}>
-            <group position={[-10, 0, 0]} rotation={[0, 0.2, 0]}>
-              <Text
-                position={[0, 0, 0]}
-                fontSize={1}
-                color="#E53935"
-                anchorX="center"
-                anchorY="middle"
-                renderOrder={2}
-                material-toneMapped={false}
-              >
-                {`MINES: ${mines}`}
-              </Text>
-            </group>
-            <group position={[0, 0, -1]}>
-              <Text
-                position={[0, 0, 0]}
-                fontSize={1}
-                color="#43A047"
-                anchorX="center"
-                anchorY="middle"
-                renderOrder={2}
-                material-toneMapped={false}
-              >
-                {`FLAGS: ${flagged.flat().filter(Boolean).length}`}
-              </Text>
-            </group>
-            <group position={[10, 0, 0]} rotation={[0, -0.2, 0]}>
-              <Text
-                position={[0, 0, 0]}
-                fontSize={1}
-                color="#FB8C00"
-                anchorX="center"
-                anchorY="middle"
-                renderOrder={2}
-                material-toneMapped={false}
-              >
-                {`TIME: ${formatTime(time)}`}
-              </Text>
-            </group>
+          <group position={[0, 6, -8]}>
+            <Text
+              position={[-8, 0, 0]}
+              fontSize={1}
+              color="#FF4136"
+              anchorX="center"
+              anchorY="middle"
+              renderOrder={2}
+              material-toneMapped={false}
+            >
+              {`MINES: ${mines}`}
+            </Text>
+            <Text
+              position={[0, 0, 0]}
+              fontSize={1}
+              color="#4CAF50"
+              anchorX="center"
+              anchorY="middle"
+              renderOrder={2}
+              material-toneMapped={false}
+            >
+              {`FLAGS: ${flagged.flat().filter(Boolean).length}`}
+            </Text>
+            <Text
+              position={[8, 0, 0]}
+              fontSize={1}
+              color="#FFA500"
+              anchorX="center"
+              anchorY="middle"
+              renderOrder={2}
+              material-toneMapped={false}
+            >
+              {`TIME: ${formatTime(time)}`}
+            </Text>
           </group>
 
-          {/* Game Status */}
-          {gameOver && (
-            <group position={[0, 6, -10]}>
-              <Float
-                speed={3}
-                rotationIntensity={0.2}
-                floatIntensity={0.5}
-                floatingRange={[-0.1, 0.1]}
-              >
-                <Text
-                  position={[0, 0, 0]}
-                  fontSize={2}
-                  color={isVictory ? "#4CAF50" : "#F44336"}
-                  anchorX="center"
-                  anchorY="middle"
-                  renderOrder={2}
-                  material-toneMapped={false}
-                >
-                  {isVictory ? "Victory!" : "Game Over"}
-                </Text>
-              </Float>
-            </group>
-          )}
-
           {/* High Scores and Restart buttons */}
-          <group position={[-12, 2, 0]} rotation={[0, Math.PI / 4, 0]}>
+          <group position={[-15, 2, -4]} rotation={[0, Math.PI / 6, 0]}>
             <Text
               position={[0, 0, 0]}
               fontSize={1}
@@ -989,7 +957,7 @@ export default function IsometricBoard() {
               High Scores
             </Text>
           </group>
-          <group position={[12, 2, 0]} rotation={[0, -Math.PI / 4, 0]}>
+          <group position={[15, 2, -4]} rotation={[0, -Math.PI / 6, 0]}>
             <Text
               position={[0, 0, 0]}
               fontSize={1.2}
@@ -1011,31 +979,33 @@ export default function IsometricBoard() {
             floatIntensity={0.1}
             floatingRange={[-0.05, 0.05]}
           >
-            <Center scale={[1, 1, 1]}>
-              <InstancedCells
-                board={board}
-                revealed={revealed}
-                flagged={flagged}
-                width={width}
-                height={height}
-                handleCellClick={handleCellClick}
-                handleCellRightClick={handleCellRightClick}
-                gameOver={gameOver}
-                bombHitPosition={bombHitPosition}
-              />
-            </Center>
+            <group position={[3, 0, 0]} scale={8/Math.max(width, height)}>
+              <group position={[-width/2, 0, -height/2]}>
+                <InstancedCells
+                  board={board}
+                  revealed={revealed}
+                  flagged={flagged}
+                  width={width}
+                  height={height}
+                  handleCellClick={handleCellClick}
+                  handleCellRightClick={handleCellRightClick}
+                  gameOver={gameOver}
+                  bombHitPosition={bombHitPosition}
+                />
+              </group>
+            </group>
           </Float>
+
           <BakeShadows />
         </Stage>
         <OrbitControls 
           enableZoom={true} 
           enablePan={true} 
           enableRotate={true}
-          minPolarAngle={0} // Allow full vertical rotation
+          minPolarAngle={0}
           maxPolarAngle={Math.PI / 2}
           maxDistance={50}
           minDistance={5}
-          target={[0, 0, 0]} // Ensure we're rotating around the center
         />
       </Canvas>
 

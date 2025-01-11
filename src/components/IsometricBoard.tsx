@@ -349,13 +349,13 @@ export default function IsometricBoard({ initialWidth = 8, initialHeight = 8, in
   const [mines, setMines] = useState(settings.mines);
   const [gameOver, setGameOver] = useState(false);
   const [isVictory, setIsVictory] = useState(false);
-  const [isRunning, setIsRunning] = useState(false);
-  const [time, setTime] = useState(0);
   const [bombHitPosition, setBombHitPosition] = useState<{ x: number; y: number } | null>(null);
-  const [lastClickTime, setLastClickTime] = useState(0);
+  const [isFirstClick, setIsFirstClick] = useState(true);
+  const [time, setTime] = useState(0);
+  const [isRunning, setIsRunning] = useState(false);
   const [highScores, setHighScores] = useState<HighScore[]>([]);
   const [playerName, setPlayerName] = useState('');
-  const [isFirstClick, setIsFirstClick] = useState(true);
+  const [lastClickTime, setLastClickTime] = useState(0);
 
   // Modals
   const { 
@@ -463,31 +463,30 @@ export default function IsometricBoard({ initialWidth = 8, initialHeight = 8, in
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Camera setup
-  const cameraRef = React.createRef<THREE.PerspectiveCamera>();
-
-  const updateCameraFrustum = React.useCallback(() => {
+  // Camera controller component
+  const CameraController: React.FC<{ width: number; height: number }> = ({ width, height }) => {
     const { camera, gl } = useThree();
-    const container = gl.domElement;
-    const aspect = container.clientWidth / container.clientHeight;
+    
+    useEffect(() => {
+      const container = gl.domElement;
+      const aspect = container.clientWidth / container.clientHeight;
+      const boardSize = Math.max(width, height);
+      const distance = boardSize * 2;
+
+      camera.position.set(distance, distance, distance);
+      camera.lookAt(0, 0, 0);
+      camera.updateProjectionMatrix();
+    }, [camera, gl, width, height]);
+
+    return null;
+  };
+
+  // Effect for updating camera when board size changes
+  useEffect(() => {
     const boardSize = Math.max(width, height);
     const distance = boardSize * 2;
-
-    camera.position.set(distance, distance, distance);
-    camera.lookAt(0, 0, 0);
-    camera.updateProjectionMatrix();
+    // Camera settings will be handled by CameraController component
   }, [width, height]);
-
-  // Handle window resize
-  useEffect(() => {
-    window.addEventListener('resize', updateCameraFrustum);
-    return () => window.removeEventListener('resize', updateCameraFrustum);
-  }, [updateCameraFrustum]);
-
-  // Update camera when board size changes
-  useEffect(() => {
-    updateCameraFrustum();
-  }, [width, height, updateCameraFrustum]);
 
   const boardCenter = React.useMemo(() => {
     return {
@@ -699,24 +698,6 @@ export default function IsometricBoard({ initialWidth = 8, initialHeight = 8, in
     } catch (error) {
       console.error('Error saving score:', error);
     }
-  };
-
-  // Camera controller component
-  const CameraController: React.FC<{ width: number; height: number }> = ({ width, height }) => {
-    const { camera, gl } = useThree();
-    
-    useEffect(() => {
-      const container = gl.domElement;
-      const aspect = container.clientWidth / container.clientHeight;
-      const boardSize = Math.max(width, height);
-      const distance = boardSize * 2;
-
-      camera.position.set(distance, distance, distance);
-      camera.lookAt(0, 0, 0);
-      camera.updateProjectionMatrix();
-    }, [camera, width, height]);
-
-    return null;
   };
 
   // Update game over state to show all bombs
@@ -998,6 +979,7 @@ export default function IsometricBoard({ initialWidth = 8, initialHeight = 8, in
           </Float>
 
           <BakeShadows />
+          <CameraController width={width} height={height} />
         </Stage>
         <OrbitControls 
           enableZoom={true} 
@@ -1008,7 +990,6 @@ export default function IsometricBoard({ initialWidth = 8, initialHeight = 8, in
           maxDistance={50}
           minDistance={5}
         />
-        <CameraController width={width} height={height} />
       </Canvas>
 
       {/* High Scores Modal */}

@@ -2,52 +2,293 @@
 
 import { 
   Box, 
-  Container, 
-  Heading, 
-  VStack, 
-  Text, 
-  Button, 
-  useColorModeValue, 
-  Icon, 
-  HStack, 
-  Badge, 
-  Link, 
   useDisclosure, 
-  Modal, 
-  ModalOverlay, 
-  ModalContent, 
-  ModalHeader, 
-  ModalBody, 
-  ModalCloseButton, 
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalBody,
+  ModalCloseButton,
   ModalFooter,
-  Input, 
-  FormControl, 
+  Button,
+  FormControl,
   FormLabel,
-  Table, 
-  Thead, 
-  Tr, 
-  Th, 
-  Tbody, 
-  Td, 
-  Select
+  Input,
+  Table,
+  Thead,
+  Tbody,
+  Tr,
+  Th,
+  Td
 } from '@chakra-ui/react';
+import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import { 
-  FaBomb, 
-  FaFlag, 
-  FaClock, 
-  FaTrophy, 
-  FaGithub, 
-  FaLinkedin 
-} from 'react-icons/fa';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { Center, OrthographicCamera, OrbitControls } from '@react-three/drei';
-import IsometricCell from './IsometricCell';
+  Stage, 
+  Float, 
+  Center, 
+  Text, 
+  BakeShadows,
+  OrbitControls,
+  PerspectiveCamera,
+  Instance,
+  Instances,
+  useGLTF,
+  OrthographicCamera
+} from '@react-three/drei';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import HighScores, { HighScore } from './HighScores';
-import fs from 'fs/promises';
-import path from 'path';
-import { LAYOUT, THEME, CELL, DIFFICULTY_SETTINGS } from '../config';
+import IsometricCell from './IsometricCell';
+
+// Create instanced materials
+const cellMaterial = new THREE.MeshStandardMaterial({
+  metalness: 0.2,
+  roughness: 0.3,
+  transparent: true,
+  opacity: 0.9,
+});
+
+const revealedMaterial = new THREE.MeshStandardMaterial({
+  metalness: 0.1,
+  roughness: 0.2,
+  transparent: true,
+  opacity: 0.95,
+});
+
+const mineMaterial = new THREE.MeshStandardMaterial({
+  color: '#ff4444',
+  metalness: 0.3,
+  roughness: 0.2,
+  transparent: true,
+  opacity: 0.8,
+});
+
+// GPU-optimized cell geometry
+const cellGeometry = new THREE.BoxGeometry(0.9, 0.3, 0.9);
+
+// Instanced Cells component
+const InstancedCells = React.memo(({ 
+  board, 
+  revealed, 
+  flagged, 
+  width, 
+  height,
+  handleCellClick,
+  handleCellRightClick,
+  gameOver,
+  bombHitPosition
+}) => {
+  const instancesRef = useRef();
+  const hoveredRef = useRef(-1);
+  const tempColor = new THREE.Color();
+  const tempObject = new THREE.Object3D();
+  
+  // Create text instances for numbers
+  const numbers = useMemo(() => {
+    const nums = [];
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const value = board[y]?.[x];
+        if (value > 0 && revealed[y]?.[x]) {
+          nums.push({
+            position: [
+              x - (width - 1) / 2,
+              0.2,
+              y - (height - 1) / 2
+            ],
+            value,
+            key: `${x}-${y}`
+          });
+        }
+      }
+    }
+    return nums;
+  }, [board, revealed, width, height]);
+
+  useFrame(() => {
+    if (!instancesRef.current || !board || !revealed || !flagged) return;
+
+    let idx = 0;
+    for (let y = 0; y < height; y++) {
+      if (!revealed[y] || !flagged[y] || !board[y]) continue;
+      
+      for (let x = 0; x < width; x++) {
+        // Position cells with proper spacing
+        tempObject.position.set(
+          x - (width - 1) / 2,
+          0,
+          y - (height - 1) / 2
+        );
+
+        // Scale cells based on hover and revealed state
+        const isHovered = idx === hoveredRef.current;
+        const isRevealed = revealed[y][x];
+        
+        if (isHovered && !isRevealed) {
+          tempObject.scale.set(1.05, 1.05, 1.05);
+        } else {
+          tempObject.scale.set(1, 1, 1);
+        }
+
+        tempObject.updateMatrix();
+        instancesRef.current.setMatrixAt(idx, tempObject.matrix);
+
+        // Set cell color based on game state
+        let cellColor;
+        if (!isRevealed) {
+          cellColor = flagged[y][x] ? '#ffd700' : '#4a90e2';
+        } else {
+          if (board[y][x] === -1) {
+            cellColor = '#ff4444';  // Mine
+          } else {
+            cellColor = '#ffffff';  // Revealed cell
+          }
+        }
+
+        tempColor.set(cellColor);
+        if (isHovered && !isRevealed) {
+          tempColor.multiplyScalar(1.2);
+        }
+        
+        instancesRef.current.setColorAt(idx, tempColor);
+        idx++;
+      }
+    }
+
+    instancesRef.current.instanceMatrix.needsUpdate = true;
+    if (instancesRef.current.instanceColor) 
+      instancesRef.current.instanceColor.needsUpdate = true;
+  });
+
+  const handlePointerOver = (e) => {
+    e.stopPropagation();
+    hoveredRef.current = e.instanceId;
+  };
+
+  const handlePointerOut = () => {
+    hoveredRef.current = -1;
+  };
+
+  const getNumberColor = (value: number) => {
+    const colors = [
+      '#1976D2', // 1: Blue
+      '#388E3C', // 2: Green
+      '#D32F2F', // 3: Red
+      '#7B1FA2', // 4: Purple
+      '#FF8F00', // 5: Orange
+      '#0097A7', // 6: Cyan
+      '#424242', // 7: Dark Grey
+      '#795548'  // 8: Brown
+    ];
+    return colors[value - 1] || '#000000';
+  };
+
+  const handleClick = (e) => {
+    e.stopPropagation();
+    if (e.instanceId === undefined) return;
+    
+    const x = e.instanceId % width;
+    const y = Math.floor(e.instanceId / width);
+    handleCellClick(x, y);
+  };
+
+  const handleContextMenu = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.instanceId === undefined) return;
+    
+    const x = e.instanceId % width;
+    const y = Math.floor(e.instanceId / width);
+    handleCellRightClick(e, x, y);
+  };
+
+  return (
+    <group>
+      <Instances
+        ref={instancesRef}
+        limit={width * height}
+        geometry={cellGeometry}
+        material={cellMaterial}
+        onPointerOver={handlePointerOver}
+        onPointerOut={handlePointerOut}
+        onClick={handleClick}
+        onContextMenu={handleContextMenu}
+      >
+        {Array.from({ length: width * height }).map((_, i) => (
+          <Instance key={i} />
+        ))}
+      </Instances>
+
+      {/* Render numbers */}
+      {numbers.map(({ position, value, key }) => (
+        <Text
+          key={key}
+          position={[position[0], 0.3, position[2]]}
+          rotation={[-Math.PI / 2, 0, 0]}
+          fontSize={0.5}
+          color={getNumberColor(value)}
+          anchorX="center"
+          anchorY="middle"
+          renderOrder={2}
+          material-toneMapped={false}
+        >
+          {value}
+        </Text>
+      ))}
+
+      {/* Render flags */}
+      {flagged.map((row, y) => 
+        row.map((isFlagged, x) => 
+          isFlagged && !revealed[y]?.[x] ? (
+            <Text
+              key={`flag-${x}-${y}`}
+              position={[
+                x - (width - 1) / 2,
+                0.3,
+                y - (height - 1) / 2
+              ]}
+              rotation={[-Math.PI / 2, 0, 0]}
+              fontSize={0.4}
+              color="#FF0000"
+              anchorX="center"
+              anchorY="middle"
+              renderOrder={2}
+              material-toneMapped={false}
+            >
+              ⚑
+            </Text>
+          ) : null
+        )
+      )}
+
+      {/* Render mines when game is over */}
+      {gameOver && board.map((row, y) => 
+        row.map((value, x) => 
+          value === -1 ? (
+            <Text
+              key={`mine-${x}-${y}`}
+              position={[
+                x - (width - 1) / 2,
+                0.3,
+                y - (height - 1) / 2
+              ]}
+              rotation={[-Math.PI / 2, 0, 0]}
+              fontSize={0.4}
+              color={bombHitPosition?.x === x && bombHitPosition?.y === y ? "#FF0000" : "#000000"}
+              anchorX="center"
+              anchorY="middle"
+              renderOrder={2}
+              material-toneMapped={false}
+            >
+              💣
+            </Text>
+          ) : null
+        )
+      )}
+    </group>
+  );
+});
+
+InstancedCells.displayName = 'InstancedCells';
 
 interface Props {
   width?: number;
@@ -56,54 +297,183 @@ interface Props {
   levels?: number;
 }
 
-const IsometricBoard: React.FC<Props> = ({ 
-  width: initialWidth = 8, 
-  height: initialHeight = 8, 
-  mines: initialMines = 10,
-  levels = 1 
-}) => {
-  // Add difficulty level types and settings
-  type Difficulty = 'easy' | 'medium' | 'hard';
+interface HighScore {
+  name: string;
+  time: number;
+  boardSize: string;
+  date: string;
+}
 
-  // Board state
-  const [width, setWidth] = useState(initialWidth);
-  const [height, setHeight] = useState(initialHeight);
-  const [mines, setMines] = useState(initialMines);
-  const [board, setBoard] = useState<number[][]>(Array(height).fill(null).map(() => Array(width).fill(0)));
-  const [revealed, setRevealed] = useState<boolean[][]>(Array(height).fill(null).map(() => Array(width).fill(false)));
-  const [flagged, setFlagged] = useState<boolean[][]>(Array(height).fill(null).map(() => Array(width).fill(false)));
-  const [gameOver, setGameOver] = useState(false);
-  const [firstClick, setFirstClick] = useState(true);
-  const [isVictory, setIsVictory] = useState(false);
-  const [time, setTime] = useState(0);
-  const [isRunning, setIsRunning] = useState(false);
-  const [difficulty, setDifficulty] = useState<Difficulty>('easy');
-  const [playerName, setPlayerName] = useState('');
-  const [devMode, setDevMode] = useState(false);
-  const [bombHitPosition, setBombHitPosition] = useState<{ x: number, y: number } | undefined>();
-  const [lastClickTime, setLastClickTime] = useState(0);
-  const CLICK_DELAY = 100; // Minimum milliseconds between clicks
-  const boardSize = `${width}x${height}x${levels}`;
+// Difficulty settings
+const DIFFICULTY_SETTINGS = {
+  easy: { width: 8, height: 8, mines: 10 },
+  medium: { width: 16, height: 16, mines: 40 },
+  hard: { width: 24, height: 24, mines: 99 }
+} as const;
+
+export default function IsometricBoard() {
+  const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard'>('easy');
+  const settings = DIFFICULTY_SETTINGS[difficulty];
   
-  // Camera setup
-  const cameraRef = useRef<THREE.OrthographicCamera>(null);
+  // Game state
+  const [board, setBoard] = useState<number[][]>(() => (
+    Array(settings.height).fill(null).map(() => Array(settings.width).fill(0))
+  ));
+  
+  const [revealed, setRevealed] = useState<boolean[][]>(() => (
+    Array(settings.height).fill(null).map(() => Array(settings.width).fill(false))
+  ));
+  
+  const [flagged, setFlagged] = useState<boolean[][]>(() => (
+    Array(settings.height).fill(null).map(() => Array(settings.width).fill(false))
+  ));
 
-  const updateCameraFrustum = useCallback(() => {
+  const [width, setWidth] = useState(settings.width);
+  const [height, setHeight] = useState(settings.height);
+  const [mines, setMines] = useState(settings.mines);
+  const [gameOver, setGameOver] = useState(false);
+  const [isVictory, setIsVictory] = useState(false);
+  const [isRunning, setIsRunning] = useState(false);
+  const [time, setTime] = useState(0);
+  const [bombHitPosition, setBombHitPosition] = useState<{ x: number; y: number } | null>(null);
+  const [lastClickTime, setLastClickTime] = useState(0);
+  const [highScores, setHighScores] = useState<HighScore[]>([]);
+  const [playerName, setPlayerName] = useState('');
+  const [isFirstClick, setIsFirstClick] = useState(true);
+
+  // Modals
+  const { 
+    isOpen: isHighScoresOpen, 
+    onOpen: onHighScoresOpen, 
+    onClose: onHighScoresClose 
+  } = useDisclosure();
+  
+  const { 
+    isOpen: isNameModalOpen, 
+    onOpen: onNameModalOpen, 
+    onClose: onNameModalClose 
+  } = useDisclosure();
+
+  // Timer effect
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isRunning && !gameOver) {
+      interval = setInterval(() => {
+        setTime((prevTime) => prevTime + 1);
+      }, 1000);
+    }
+    return () => {
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
+  }, [isRunning, gameOver]);
+
+  // Handle keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'r' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        handleDifficultyChange(difficulty); // Reset current difficulty
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [difficulty]);
+
+  // Update difficulty handler
+  const handleDifficultyChange = (newDifficulty: 'easy' | 'medium' | 'hard') => {
+    setDifficulty(newDifficulty);
+    const settings = DIFFICULTY_SETTINGS[newDifficulty];
+    
+    // Update dimensions
+    setWidth(settings.width);
+    setHeight(settings.height);
+    setMines(settings.mines);
+    
+    // Reset game state with new settings
+    const emptyBoard = Array(settings.height).fill(null).map(() => Array(settings.width).fill(0));
+    setBoard(emptyBoard);
+    setRevealed(Array(settings.height).fill(null).map(() => Array(settings.width).fill(false)));
+    setFlagged(Array(settings.height).fill(null).map(() => Array(settings.width).fill(false)));
+    setGameOver(false);
+    setIsVictory(false);
+    setIsRunning(false);
+    setTime(0);
+    setBombHitPosition(null);
+    setIsFirstClick(true);
+  };
+
+  // Update restart function
+  const restartGame = () => {
+    const settings = DIFFICULTY_SETTINGS[difficulty];
+    
+    // Update dimensions
+    setWidth(settings.width);
+    setHeight(settings.height);
+    setMines(settings.mines);
+    
+    // Reset game state
+    const emptyBoard = Array(settings.height).fill(null).map(() => Array(settings.width).fill(0));
+    setBoard(emptyBoard);
+    setRevealed(Array(settings.height).fill(null).map(() => Array(settings.width).fill(false)));
+    setFlagged(Array(settings.height).fill(null).map(() => Array(settings.width).fill(false)));
+    setGameOver(false);
+    setIsVictory(false);
+    setIsRunning(false);
+    setTime(0);
+    setBombHitPosition(null);
+    setIsFirstClick(true);
+  };
+
+  // Update useEffect for initial board setup
+  useEffect(() => {
+    const settings = DIFFICULTY_SETTINGS[difficulty];
+    setWidth(settings.width);
+    setHeight(settings.height);
+    setMines(settings.mines);
+    
+    const emptyBoard = Array(settings.height).fill(null).map(() => Array(settings.width).fill(0));
+    setBoard(emptyBoard);
+    setRevealed(Array(settings.height).fill(null).map(() => Array(settings.width).fill(false)));
+    setFlagged(Array(settings.height).fill(null).map(() => Array(settings.width).fill(false)));
+  }, []);
+
+  // Format time as MM:SS
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Camera setup
+  const cameraRef = React.createRef<THREE.PerspectiveCamera>();
+
+  const updateCameraFrustum = React.useCallback(() => {
     if (!cameraRef.current) return;
 
     const camera = cameraRef.current;
     const aspect = window.innerWidth / window.innerHeight;
     const boardSize = Math.max(width, height);
-    const frustumSize = boardSize * LAYOUT.camera.padding;
+    const frustumSize = boardSize * 1.5;
 
     camera.left = -frustumSize * aspect / 2;
     camera.right = frustumSize * aspect / 2;
     camera.top = frustumSize / 2;
     camera.bottom = -frustumSize / 2;
-    camera.near = LAYOUT.camera.near;
-    camera.far = LAYOUT.camera.far;
-    camera.position.set(0, LAYOUT.camera.height, 0);
-    camera.lookAt(0, 0, 0);
+    camera.near = 0.1;
+    camera.far = 1000;
+    camera.position.set(
+      20,
+      20,
+      20
+    );
+    camera.rotation.set(
+      0,
+      0,
+      0
+    );
     camera.updateProjectionMatrix();
   }, [width, height]);
 
@@ -118,92 +488,30 @@ const IsometricBoard: React.FC<Props> = ({
     updateCameraFrustum();
   }, [width, height, updateCameraFrustum]);
 
-  const { isOpen: isHighScoresOpen, onOpen: onHighScoresOpen, onClose: onHighScoresClose } = useDisclosure();
-  const { isOpen: isNameModalOpen, onOpen: onNameModalOpen, onClose: onNameModalClose } = useDisclosure();
-  const [highScores, setHighScores] = useState<HighScore[]>([]);
-  const boardCenter = useMemo(() => {
+  const boardCenter = React.useMemo(() => {
     return {
-      x: LAYOUT.board.position.x,
-      y: LAYOUT.board.position.y,
-      z: LAYOUT.board.position.z
+      x: 0,
+      y: 0,
+      z: 0
     };
   }, []);
 
-  // Update board size when difficulty changes
+  // Check for victory when game is over
   useEffect(() => {
-    const settings = DIFFICULTY_SETTINGS[difficulty];
-    console.log('Changing difficulty to:', difficulty, settings);
-    setWidth(settings.width);
-    setHeight(settings.height);
-    setMines(settings.mines);
-
-    // Reset game state
-    setBoard(Array(settings.height).fill(null).map(() => Array(settings.width).fill(0)));
-    setRevealed(Array(settings.height).fill(null).map(() => Array(settings.width).fill(false)));
-    setFlagged(Array(settings.height).fill(null).map(() => Array(settings.width).fill(false)));
-    setGameOver(false);
-    setIsVictory(false);
-    setFirstClick(true);
-    setTime(0);
-    setIsRunning(false);
-  }, [difficulty]);
-
-  const handleDifficultyChange = (newDifficulty: Difficulty) => {
-    console.log('Setting difficulty to:', newDifficulty);
-    setDifficulty(newDifficulty);
-  };
-
-  // Load high scores from API
-  const loadHighScores = async () => {
-    try {
-      const response = await fetch(`/api/scores?boardSize=${width}x${height}`);
-      if (!response.ok) throw new Error('Failed to fetch scores');
-      const data = await response.json();
-      setHighScores(data);
-    } catch (error) {
-      console.error('Error loading scores:', error);
+    if (gameOver && isVictory) {
+      const isHighScore = checkHighScore();
+      if (isHighScore) {
+        onNameModalOpen();
+      }
     }
-  };
+  }, [gameOver, isVictory]);
 
-  // Load scores on mount and when board size changes
-  useEffect(() => {
-    loadHighScores();
-  }, [width, height]);
-
-  // Reload scores when modal opens
+  // Load high scores
   useEffect(() => {
     if (isHighScoresOpen) {
       loadHighScores();
     }
   }, [isHighScoresOpen]);
-
-  // Save high score to API
-  const saveHighScore = async (name: string) => {
-    try {
-      const newScore = {
-        name: name.slice(0, 3).toUpperCase(), // Convert to initials
-        time,
-        boardSize,
-        date: new Date().toISOString()
-      };
-
-      const response = await fetch('/api/scores', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(newScore),
-      });
-
-      const updatedScores = await response.json();
-      setHighScores(updatedScores);
-      onNameModalClose();
-      setPlayerName('');
-      onHighScoresOpen(); // Show high scores after saving
-    } catch (error) {
-      console.error('Failed to save score:', error);
-    }
-  };
 
   // Check if current score is a high score
   const checkHighScore = () => {
@@ -211,186 +519,117 @@ const IsometricBoard: React.FC<Props> = ({
     return time < highScores[highScores.length - 1].time;
   };
 
-  useEffect(() => {
-    let intervalId: NodeJS.Timeout;
-    if (isRunning) {
-      intervalId = setInterval(() => {
-        setTime(prevTime => prevTime + 1);
-      }, 1000);
+  // Load high scores from storage
+  const loadHighScores = () => {
+    const scores = localStorage.getItem(`highScores-${width}x${height}`);
+    if (scores) {
+      setHighScores(JSON.parse(scores));
     }
-    return () => {
-      if (intervalId) clearInterval(intervalId);
-    };
-  }, [isRunning]);
-
-  useEffect(() => {
-    let intervalId: NodeJS.Timeout;
-    if (isRunning) {
-      intervalId = setInterval(() => {
-        setTime(prevTime => prevTime + 1);
-      }, 1000);
-    }
-    return () => {
-      if (intervalId) clearInterval(intervalId);
-    };
-  }, [isRunning]);
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const resetGame = () => {
-    setBoard(Array(height).fill(null).map(() => Array(width).fill(0)));
-    setRevealed(Array(height).fill(null).map(() => Array(width).fill(false)));
-    setFlagged(Array(height).fill(null).map(() => Array(width).fill(false)));
-    setGameOver(false);
-    setIsVictory(false);
-    setFirstClick(true);
-    setTime(0);
-    setIsRunning(false);
+  // Save high score
+  const saveHighScore = () => {
+    if (!playerName) return;
+
+    const newScore: HighScore = {
+      name: playerName.toUpperCase().slice(0, 3),
+      time,
+      boardSize: `${width}x${height}`,
+      date: new Date().toISOString()
+    };
+
+    const updatedScores = [...highScores, newScore]
+      .sort((a, b) => a.time - b.time)
+      .slice(0, 10);
+
+    setHighScores(updatedScores);
+    localStorage.setItem(`highScores-${width}x${height}`, JSON.stringify(updatedScores));
+    onNameModalClose();
+    setPlayerName('');
+    onHighScoresOpen(); // Show high scores after saving
   };
 
-  const initializeBoard = (width: number, height: number, mineCount: number, firstClick: { x: number, y: number }) => {
-    const newBoard = Array(height).fill(null).map(() => Array(width).fill(0));
-    let minesToPlace = mineCount;
+  const revealCell = (x: number, y: number, revealed: boolean[][], board: number[][]) => {
+    // Base case - out of bounds or already revealed
+    if (x < 0 || x >= width || y < 0 || y >= height) return;
+    if (revealed[y][x] || flagged[y][x]) return;
 
-    // Place mines avoiding first click and its adjacent cells
-    while (minesToPlace > 0) {
-      const randX = Math.floor(Math.random() * width);
-      const randY = Math.floor(Math.random() * height);
+    // Reveal current cell
+    revealed[y][x] = true;
 
-      // Don't place mine on first click or adjacent to it
-      if (Math.abs(randX - firstClick.x) <= 1 && Math.abs(randY - firstClick.y) <= 1) continue;
-      if (newBoard[randY][randX] === -1) continue; // Skip if already a mine
-
-      newBoard[randY][randX] = -1;
-      minesToPlace--;
-    }
-
-    // Calculate numbers for each cell
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        if (newBoard[y][x] === -1) continue;
-
-        let count = 0;
-        for (let dy = -1; dy <= 1; dy++) {
-          for (let dx = -1; dx <= 1; dx++) {
-            if (dx === 0 && dy === 0) continue;
-            
-            const newX = x + dx;
-            const newY = y + dy;
-            
-            if (newX >= 0 && newX < width && newY >= 0 && newY < height) {
-              if (newBoard[newY][newX] === -1) count++;
-            }
+    // If it's a 0, recursively reveal neighbors
+    if (board[y][x] === 0) {
+      // Check all 8 adjacent cells
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const newX = x + dx;
+          const newY = y + dy;
+          
+          // Recursively reveal valid neighbors
+          if (newX >= 0 && newX < width && newY >= 0 && newY < height) {
+            revealCell(newX, newY, revealed, board);
           }
         }
-        newBoard[y][x] = count;
       }
     }
-
-    return newBoard;
   };
 
-  const handleCellClick = (e: ThreeEvent<MouseEvent>, x: number, y: number) => {
-    const now = Date.now();
-    if (now - lastClickTime < CLICK_DELAY) return;
-    setLastClickTime(now);
+  const handleCellClick = (x: number, y: number) => {
+    const settings = DIFFICULTY_SETTINGS[difficulty];
+    
+    // Validate coordinates
+    if (x < 0 || x >= settings.width || y < 0 || y >= settings.height) return;
+    if (!board[y] || !flagged[y]) return;
 
     if (gameOver || flagged[y][x]) return;
 
     if (!isRunning) {
       setIsRunning(true);
+      setTime(0);
     }
 
-    // Convert from isometric coordinates to board coordinates
-    const boardX = Math.floor(x);
-    const boardY = Math.floor(y);
-
-    if (firstClick) {
-      // Initialize board with safe first click
-      const newBoard = initializeBoard(width, height, mines, { x: boardX, y: boardY });
+    // Handle first click
+    if (isFirstClick) {
+      setIsFirstClick(false);
+      
+      // Create new board ensuring first click is empty
+      const newBoard = createBoard(settings.width, settings.height, settings.mines, x, y);
       setBoard(newBoard);
-      setFirstClick(false);
-
-      // Reveal the clicked cell and adjacent cells if empty
-      const newRevealed = Array(height).fill(null).map(() => Array(width).fill(false));
-      floodFill(boardX, boardY, newBoard, newRevealed);
+      
+      // Create new revealed array
+      const newRevealed = Array(settings.height).fill(null).map(() => Array(settings.width).fill(false));
+      
+      // Recursively reveal clicked cell and connected empty cells
+      revealCell(x, y, newRevealed, newBoard);
       setRevealed(newRevealed);
       return;
     }
 
-    if (board[boardY][boardX] === -1) {
-      // Hit a mine
+    // Handle subsequent clicks
+    const newRevealed = revealed.map(row => [...row]);
+    
+    if (board[y][x] === -1) {
       setGameOver(true);
-      setIsRunning(false);
-      revealAllMines();
+      setBombHitPosition({ x, y });
+      newRevealed[y][x] = true;
+      setRevealed(newRevealed);
       return;
     }
 
-    // Reveal cells
-    const newRevealed = revealed.map(row => [...row]);
-    floodFill(boardX, boardY, board, newRevealed);
+    // Recursively reveal clicked cell and connected empty cells
+    revealCell(x, y, newRevealed, board);
     setRevealed(newRevealed);
 
-    // Check for win
-    if (checkWin(newRevealed)) {
+    // Check for victory
+    const totalNonMines = settings.width * settings.height - settings.mines;
+    const revealedCount = newRevealed.flat().filter(Boolean).length;
+    if (revealedCount === totalNonMines) {
       setGameOver(true);
       setIsVictory(true);
-      setIsRunning(false);
-      if (checkHighScore()) {
+      if (playerName === '') {
         onNameModalOpen();
       }
     }
-  };
-
-  const floodFill = (x: number, y: number, currentBoard: number[][], newRevealed: boolean[][]) => {
-    if (x < 0 || x >= width || y < 0 || y >= height || newRevealed[y][x] || flagged[y][x]) return;
-
-    newRevealed[y][x] = true;
-
-    // If it's an empty cell, flood fill adjacent cells
-    if (currentBoard[y][x] === 0) {
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
-          const newX = x + dx;
-          const newY = y + dy;
-          floodFill(newX, newY, currentBoard, newRevealed);
-        }
-      }
-    }
-  };
-
-  const revealAllMines = () => {
-    const newRevealed = revealed.map(row => [...row]);
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        if (board[y][x] === -1) {
-          newRevealed[y][x] = true;
-        }
-      }
-    }
-    setRevealed(newRevealed);
-  };
-
-  const checkWin = (newRevealed: boolean[][]) => {
-    let unrevealedSafeCells = 0;
-    let totalMines = 0;
-
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        if (board[y][x] === -1) {
-          totalMines++;
-        } else if (!newRevealed[y][x]) {
-          unrevealedSafeCells++;
-        }
-      }
-    }
-
-    // Win if all non-mine cells are revealed
-    return unrevealedSafeCells === 0;
   };
 
   const handleCellRightClick = (e: ThreeEvent<MouseEvent>, x: number, y: number) => {
@@ -399,13 +638,18 @@ const IsometricBoard: React.FC<Props> = ({
       e.nativeEvent.stopPropagation();
     }
 
-    const now = Date.now();
-    if (now - lastClickTime < CLICK_DELAY) return;
-    setLastClickTime(now);
+    // Validate coordinates
+    if (x < 0 || x >= width || y < 0 || y >= height) return;
+    if (!board[y] || !flagged[y]) return;
 
     if (gameOver || revealed[y][x]) return;
 
-    const newFlagged = [...flagged.map(row => [...row])];
+    const now = Date.now();
+    // Debounce clicks
+    if (now - lastClickTime < 100) return;
+    setLastClickTime(now);
+
+    const newFlagged = flagged.map(row => [...row]);
     newFlagged[y][x] = !newFlagged[y][x];
     setFlagged(newFlagged);
   };
@@ -424,30 +668,6 @@ const IsometricBoard: React.FC<Props> = ({
       setBombHitPosition(undefined);
     }
   }, [gameOver]);
-
-  useEffect(() => {
-    if (!firstClick && board.length > 0) {
-      const lastClickedCell = { x: -1, y: -1 };
-      
-      // Find an empty cell (value 0) to simulate the first click
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          if (board[y][x] === 0) {
-            lastClickedCell.x = x;
-            lastClickedCell.y = y;
-            break;
-          }
-        }
-        if (lastClickedCell.x !== -1) break;
-      }
-
-      if (lastClickedCell.x !== -1) {
-        const newRevealed = [...revealed.map(row => [...row])];
-        floodFill(lastClickedCell.x, lastClickedCell.y, board, newRevealed);
-        setRevealed(newRevealed);
-      }
-    }
-  }, [board, firstClick]);
 
   const handleNameSubmit = async () => {
     if (!playerName) return;
@@ -477,335 +697,375 @@ const IsometricBoard: React.FC<Props> = ({
     }
   };
 
-  const handleKeyDown = async (e: KeyboardEvent) => {
-    if (e.altKey && e.key === 'd') {
-      setDevMode(prev => !prev);
-    }
-    if (devMode) {
-      const rotationDelta = Math.PI / 48; // 3.75 degrees
-      let newRotation = [...boardRotation];
-      let shouldSave = false;
-      
-      switch(e.key) {
-        case 'ArrowUp':
-          newRotation[0] -= rotationDelta;
-          shouldSave = true;
-          break;
-        case 'ArrowDown':
-          newRotation[0] += rotationDelta;
-          shouldSave = true;
-          break;
-        case 'ArrowLeft':
-          newRotation[1] -= rotationDelta;
-          shouldSave = true;
-          break;
-        case 'ArrowRight':
-          newRotation[1] += rotationDelta;
-          shouldSave = true;
-          break;
-        case '[':
-          newRotation[2] -= rotationDelta;
-          shouldSave = true;
-          break;
-        case ']':
-          newRotation[2] += rotationDelta;
-          shouldSave = true;
-          break;
-      }
-
-      if (shouldSave) {
-        setBoardRotation(newRotation);
-        try {
-          const response = await fetch('/api/settings', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              boardRotation: newRotation,
-              cellRotation: boardRotation // Preserve existing cell rotation
-            }),
-          });
-          if (!response.ok) {
-            throw new Error('Failed to save settings');
-          }
-        } catch (error) {
-          console.error('Error saving settings:', error);
-        }
-      }
-    }
-  };
-
-  useEffect(() => {
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [devMode]);
-
-  useEffect(() => {
-    async function loadSettings() {
-      try {
-        const response = await fetch('/api/settings');
-        const settings = await response.json();
-        setBoardRotation(settings.boardRotation);
-      } catch (error) {
-        console.error('Error loading settings:', error);
-      }
-    }
-    loadSettings();
-  }, []);
-
   // Camera controller component
   const CameraController: React.FC<{ width: number; height: number }> = ({ width, height }) => {
-    const { camera, size } = useThree();
+    const { camera } = useThree();
     
     useEffect(() => {
-      if (!(camera instanceof THREE.OrthographicCamera)) return;
+      const maxDimension = Math.max(width, height);
+      const distance = maxDimension * 1.5;
+      const cameraHeight = maxDimension * 1.2;
       
-      const padding = 2; 
-      const boardWidth = width * padding;
-      const boardHeight = height * padding;
-      const aspect = size.width / size.height;
-      
-      const zoom = Math.max(boardWidth, boardHeight) / 2;
-      
-      camera.left = -zoom * aspect;
-      camera.right = zoom * aspect;
-      camera.top = zoom;
-      camera.bottom = -zoom;
-      camera.position.set(0, 15, 0);
+      camera.position.set(distance, cameraHeight, distance);
       camera.lookAt(0, 0, 0);
       camera.updateProjectionMatrix();
-    }, [camera, size, width, height]);
+    }, [camera, width, height]);
 
     return null;
   };
 
+  // Update game over state to show all bombs
+  useEffect(() => {
+    if (gameOver) {
+      const newRevealed = revealed.map((row, y) =>
+        row.map((cell, x) => 
+          board[y][x] === -1 ? true : revealed[y][x]
+        )
+      );
+      setRevealed(newRevealed);
+    }
+  }, [gameOver]);
+
+  useEffect(() => {
+    const handleContextMenuGlobal = (e: MouseEvent) => {
+      e.preventDefault();
+    };
+    document.addEventListener('contextmenu', handleContextMenuGlobal);
+    return () => {
+      document.removeEventListener('contextmenu', handleContextMenuGlobal);
+    };
+  }, []);
+
+  function createBoard(width: number, height: number, totalMines: number, firstX?: number, firstY?: number): number[][] {
+    // Create empty board
+    const board = Array(height).fill(null).map(() => Array(width).fill(0));
+    
+    // If this isn't first click, just randomly place mines
+    if (firstX === undefined || firstY === undefined) {
+      let minesPlaced = 0;
+      while (minesPlaced < totalMines) {
+        const x = Math.floor(Math.random() * width);
+        const y = Math.floor(Math.random() * height);
+        if (board[y][x] !== -1) {
+          board[y][x] = -1;
+          minesPlaced++;
+        }
+      }
+      return board;
+    }
+
+    // For first click, create list of all possible positions except 3x3 area around click
+    const availablePositions: [number, number][] = [];
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        // Skip 3x3 area around first click
+        if (Math.abs(x - firstX) <= 1 && Math.abs(y - firstY) <= 1) continue;
+        availablePositions.push([x, y]);
+      }
+    }
+
+    // Randomly place mines in available positions
+    for (let i = 0; i < totalMines && availablePositions.length > 0; i++) {
+      const index = Math.floor(Math.random() * availablePositions.length);
+      const [x, y] = availablePositions[index];
+      board[y][x] = -1;
+      availablePositions.splice(index, 1);
+    }
+
+    // Calculate numbers for all non-mine cells
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        if (board[y][x] === -1) continue;
+        
+        let count = 0;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue;
+            
+            const newX = x + dx;
+            const newY = y + dy;
+            
+            if (newX >= 0 && newX < width && newY >= 0 && newY < height) {
+              if (board[newY][newX] === -1) count++;
+            }
+          }
+        }
+        board[y][x] = count;
+      }
+    }
+
+    return board;
+  }
+
   return (
-    <Box bg={useColorModeValue(THEME.colors.background.light, THEME.colors.background.dark)} height="100%" width="100%">
-      <Container maxW="none" height="100%" width="100%" p={0}>
-        <VStack spacing={4} height="100%" width="100%" align="stretch">
-          <Box 
-            as="main"
-            height="100%"
-            width="100%"
-            p={4}
-            borderRadius="xl"
-            bg={useColorModeValue('blue.50', 'blue.900')}
-            overflow="hidden"
-            display="flex"
-            flexDirection="column"
-          >
-            {/* Game Header */}
-            <VStack spacing={4} mb={6}>
-              <Text fontSize="3xl" fontWeight="bold" bgGradient="linear(to-r, blue.400, purple.500)" bgClip="text">
+    <Box
+      w="100%"
+      h="800px"
+      position="relative"
+      bg="linear-gradient(135deg, #1a1c20 0%, #2d3436 100%)"
+      p={8}
+    >
+      <Canvas
+        dpr={[1, 2]}
+        gl={{ 
+          powerPreference: "high-performance",
+          antialias: true,
+          alpha: false,
+          stencil: false,
+          depth: true,
+        }}
+        camera={{
+          fov: 50,
+          near: 0.1,
+          far: 1000,
+          position: [20, 20, 20]
+        }}
+      >
+        <color attach="background" args={['#1a1c20']} />
+        <ambientLight intensity={0.5} />
+        <pointLight position={[10, 10, 10]} intensity={0.5} />
+        <pointLight position={[-10, 10, -10]} intensity={0.5} />
+        
+        <Stage
+          intensity={0.5}
+          preset="rembrandt"
+          adjustCamera={false}
+        >
+          <PerspectiveCamera
+            makeDefault
+            position={[20, 20, 20]}
+            fov={50}
+            near={0.1}
+            far={1000}
+          />
+
+          {/* Game Title and Info */}
+          <group position={[0, 12, -12]}>
+            <Float
+              speed={2}
+              rotationIntensity={0.2}
+              floatIntensity={0.5}
+              floatingRange={[-0.1, 0.1]}
+            >
+              <Text
+                position={[0, 0, 0]}
+                fontSize={2.5}
+                color="#4A90E2"
+                anchorX="center"
+                anchorY="middle"
+                renderOrder={2}
+                material-toneMapped={false}
+              >
                 Minesweeper 3D
               </Text>
-              
-              <HStack spacing={4} justify="center">
-                <Button
-                  colorScheme="green"
-                  variant={difficulty === 'easy' ? 'solid' : 'outline'}
-                  onClick={() => setDifficulty('easy')}
-                >
-                  Easy (8×8)
-                </Button>
-                <Button
-                  colorScheme="blue"
-                  variant={difficulty === 'medium' ? 'solid' : 'outline'}
-                  onClick={() => setDifficulty('medium')}
-                >
-                  Medium (16×16)
-                </Button>
-                <Button
-                  colorScheme="purple"
-                  variant={difficulty === 'hard' ? 'solid' : 'outline'}
-                  onClick={() => setDifficulty('hard')}
-                >
-                  Hard (24×24)
-                </Button>
-              </HStack>
+            </Float>
+          </group>
 
-              <HStack spacing={6} justify="center">
-                <Box bg="blue.100" px={4} py={2} borderRadius="md">
-                  <HStack>
-                    <Icon as={FaBomb} />
-                    <Text>MINES: {mines}</Text>
-                  </HStack>
-                </Box>
-                <Box bg="green.100" px={4} py={2} borderRadius="md">
-                  <HStack>
-                    <Icon as={FaFlag} />
-                    <Text>FLAGS: {flagged.flat().filter(flag => flag).length}</Text>
-                  </HStack>
-                </Box>
-                <Box bg="red.100" px={4} py={2} borderRadius="md">
-                  <HStack>
-                    <Icon as={FaClock} />
-                    <Text>TIME: {formatTime(time)}</Text>
-                  </HStack>
-                </Box>
-                <Button
-                  colorScheme="yellow"
-                  leftIcon={<Icon as={FaTrophy} />}
-                  onClick={onHighScoresOpen}
-                >
-                  High Scores
-                </Button>
-              </HStack>
-            </VStack>
+          {/* Difficulty Buttons */}
+          <group position={[0, 8, -10]}>
+            <group position={[-10, 0, 0]} rotation={[0, 0.2, 0]}>
+              <Text
+                position={[0, 0, 0]}
+                fontSize={1}
+                color={difficulty === 'easy' ? "#4CAF50" : "#888888"}
+                anchorX="center"
+                anchorY="middle"
+                onClick={() => handleDifficultyChange('easy')}
+                renderOrder={2}
+                material-toneMapped={false}
+              >
+                Easy (8×8)
+              </Text>
+            </group>
+            <group position={[0, 0, -1]}>
+              <Text
+                position={[0, 0, 0]}
+                fontSize={1}
+                color={difficulty === 'medium' ? "#2196F3" : "#888888"}
+                anchorX="center"
+                anchorY="middle"
+                onClick={() => handleDifficultyChange('medium')}
+                renderOrder={2}
+                material-toneMapped={false}
+              >
+                Medium (16×16)
+              </Text>
+            </group>
+            <group position={[10, 0, 0]} rotation={[0, -0.2, 0]}>
+              <Text
+                position={[0, 0, 0]}
+                fontSize={1}
+                color={difficulty === 'hard' ? "#9C27B0" : "#888888"}
+                anchorX="center"
+                anchorY="middle"
+                onClick={() => handleDifficultyChange('hard')}
+                renderOrder={2}
+                material-toneMapped={false}
+              >
+                Hard (24×24)
+              </Text>
+            </group>
+          </group>
 
-            {/* Game Board */}
-            <Box
-              flex={1}
-              width="100%"
-              position="relative"
-              borderRadius={LAYOUT.gameBoard.borderRadius}
-              overflow="hidden"
-              bg={useColorModeValue('blue.50', 'blue.900')}
-              mb={4}
+          {/* Game Stats */}
+          <group position={[0, 4, -10]}>
+            <group position={[-10, 0, 0]} rotation={[0, 0.2, 0]}>
+              <Text
+                position={[0, 0, 0]}
+                fontSize={1}
+                color="#E53935"
+                anchorX="center"
+                anchorY="middle"
+                renderOrder={2}
+                material-toneMapped={false}
+              >
+                {`MINES: ${mines}`}
+              </Text>
+            </group>
+            <group position={[0, 0, -1]}>
+              <Text
+                position={[0, 0, 0]}
+                fontSize={1}
+                color="#43A047"
+                anchorX="center"
+                anchorY="middle"
+                renderOrder={2}
+                material-toneMapped={false}
+              >
+                {`FLAGS: ${flagged.flat().filter(Boolean).length}`}
+              </Text>
+            </group>
+            <group position={[10, 0, 0]} rotation={[0, -0.2, 0]}>
+              <Text
+                position={[0, 0, 0]}
+                fontSize={1}
+                color="#FB8C00"
+                anchorX="center"
+                anchorY="middle"
+                renderOrder={2}
+                material-toneMapped={false}
+              >
+                {`TIME: ${formatTime(time)}`}
+              </Text>
+            </group>
+          </group>
+
+          {/* Game Status */}
+          {gameOver && (
+            <group position={[0, 6, -10]}>
+              <Float
+                speed={3}
+                rotationIntensity={0.2}
+                floatIntensity={0.5}
+                floatingRange={[-0.1, 0.1]}
+              >
+                <Text
+                  position={[0, 0, 0]}
+                  fontSize={2}
+                  color={isVictory ? "#4CAF50" : "#F44336"}
+                  anchorX="center"
+                  anchorY="middle"
+                  renderOrder={2}
+                  material-toneMapped={false}
+                >
+                  {isVictory ? "Victory!" : "Game Over"}
+                </Text>
+              </Float>
+            </group>
+          )}
+
+          {/* High Scores and Restart buttons */}
+          <group position={[-12, 2, 0]} rotation={[0, Math.PI / 4, 0]}>
+            <Text
+              position={[0, 0, 0]}
+              fontSize={1}
+              color="#FFD700"
+              anchorX="center"
+              anchorY="middle"
+              onClick={onHighScoresOpen}
+              renderOrder={2}
+              material-toneMapped={false}
             >
-              <Canvas
-                style={{ width: '100%', height: '100%' }}
-                gl={{ antialias: true }}
-              >
-                <OrthographicCamera
-                  ref={cameraRef}
-                  makeDefault
-                  position={[0, LAYOUT.camera.height, 0]}
-                />
-                <color attach="background" args={['#f0f8ff']} />
-                <ambientLight intensity={0.5} />
-                <directionalLight position={[0, 5, 5]} intensity={0.5} />
-                
-                <Center>
-                  <group 
-                    position={[
-                      -(width - 1) / 2 + LAYOUT.board.position.x, 
-                      -(height - 1) / 2 + LAYOUT.board.position.y, 
-                      LAYOUT.board.position.z
-                    ]}
-                    rotation={[
-                      LAYOUT.board.rotation.x,
-                      LAYOUT.board.rotation.y,
-                      LAYOUT.board.rotation.z
-                    ]}
-                  >
-                    {board.map((row, y) => 
-                      row.map((value, x) => (
-                        <IsometricCell
-                          key={`${x}-${y}`}
-                          position={[x, 0, y]}
-                          value={value}
-                          revealed={revealed[y]?.[x]}
-                          flagged={flagged[y]?.[x]}
-                          hasMine={value === -1}
-                          onClick={() => handleCellClick(x, y)}
-                          onContextMenu={(e) => handleCellRightClick(e, x, y)}
-                          gameOver={gameOver}
-                          bombHitPosition={bombHitPosition}
-                          boardPosition={{ x, y }}
-                        />
-                      ))
-                    )}
-                  </group>
-                </Center>
-              </Canvas>
-            </Box>
+              High Scores
+            </Text>
+          </group>
+          <group position={[12, 2, 0]} rotation={[0, -Math.PI / 4, 0]}>
+            <Text
+              position={[0, 0, 0]}
+              fontSize={1.2}
+              color="#4A90E2"
+              anchorX="center"
+              anchorY="middle"
+              onClick={restartGame}
+              renderOrder={2}
+              material-toneMapped={false}
+            >
+              Restart Game
+            </Text>
+          </group>
 
-            {/* Game Status and Instructions */}
-            <VStack spacing={4} mt="auto">
-              <Box width="100%" p={4} borderTopWidth={1} borderColor="gray.200" minH="116px">
-                {gameOver ? (
-                  <VStack spacing={4}>
-                    <Text 
-                      color={isVictory ? "green.500" : "red.500"} 
-                      fontSize="xl" 
-                      fontWeight="bold"
-                      textAlign="center"
-                    >
-                      {isVictory ? "Congratulations, you won!" : "Game Over!"}
-                    </Text>
-                    <Button
-                      colorScheme="blue"
-                      size="md"
-                      leftIcon={<Icon as={FaBomb} />}
-                      onClick={resetGame}
-                      _hover={{
-                        transform: 'translateY(-2px)',
-                        boxShadow: 'lg',
-                      }}
-                      transition="all 0.2s"
-                    >
-                      New Game
-                    </Button>
-                  </VStack>
-                ) : (
-                  <Box height="100%" />
-                )}
-              </Box>
-
-              <Box
-                bg={useColorModeValue('white', 'gray.800')}
-                p={4}
-                rounded="lg"
-                shadow="md"
-                w="full"
-              >
-                <VStack spacing={2} align="stretch">
-                  <HStack justify="center" spacing={4}>
-                    <Icon as={FaBomb} color="red.500" boxSize={4} />
-                    <Text fontSize="sm">Left click to reveal a cell</Text>
-                  </HStack>
-                  <HStack justify="center" spacing={4}>
-                    <Icon as={FaFlag} color="green.500" boxSize={4} />
-                    <Text fontSize="sm">Right click to place/remove a flag</Text>
-                  </HStack>
-                  <Text textAlign="center" fontWeight="medium" fontSize="sm">
-                    Clear each level to progress to the next!
-                  </Text>
-                </VStack>
-              </Box>
-            </VStack>
-          </Box>
-        </VStack>
-      </Container>
+          {/* Game Board */}
+          <Float
+            speed={1}
+            rotationIntensity={0}
+            floatIntensity={0.1}
+            floatingRange={[-0.05, 0.05]}
+          >
+            <Center scale={[1, 1, 1]}>
+              <InstancedCells
+                board={board}
+                revealed={revealed}
+                flagged={flagged}
+                width={width}
+                height={height}
+                handleCellClick={handleCellClick}
+                handleCellRightClick={handleCellRightClick}
+                gameOver={gameOver}
+                bombHitPosition={bombHitPosition}
+              />
+            </Center>
+          </Float>
+          <BakeShadows />
+        </Stage>
+        <OrbitControls 
+          enableZoom={true} 
+          enablePan={true} 
+          enableRotate={true}
+          minPolarAngle={0} // Allow full vertical rotation
+          maxPolarAngle={Math.PI / 2}
+          maxDistance={50}
+          minDistance={5}
+          target={[0, 0, 0]} // Ensure we're rotating around the center
+        />
+      </Canvas>
 
       {/* High Scores Modal */}
-      <Modal isOpen={isHighScoresOpen} onClose={onHighScoresClose} size="lg">
+      <Modal isOpen={isHighScoresOpen} onClose={onHighScoresClose}>
         <ModalOverlay />
         <ModalContent>
           <ModalHeader>High Scores</ModalHeader>
           <ModalCloseButton />
           <ModalBody>
-            <VStack spacing={4} align="stretch">
-              <Text fontSize="lg" fontWeight="bold">
-                Board Size: {width}x{height}
-              </Text>
-              <Table variant="simple">
-                <Thead>
-                  <Tr>
-                    <Th>Rank</Th>
-                    <Th>Name</Th>
-                    <Th>Time</Th>
-                    <Th>Date</Th>
+            <Table variant="simple">
+              <Thead>
+                <Tr>
+                  <Th>Rank</Th>
+                  <Th>Name</Th>
+                  <Th>Time</Th>
+                  <Th>Date</Th>
+                </Tr>
+              </Thead>
+              <Tbody>
+                {highScores.map((score, index) => (
+                  <Tr key={index}>
+                    <Td>{index + 1}</Td>
+                    <Td>{score.name}</Td>
+                    <Td>{formatTime(score.time)}</Td>
+                    <Td>{new Date(score.date).toLocaleDateString()}</Td>
                   </Tr>
-                </Thead>
-                <Tbody>
-                  {highScores
-                    .filter(score => score.boardSize === `${width}x${height}`)
-                    .sort((a, b) => a.time - b.time)
-                    .slice(0, 10)
-                    .map((score, index) => (
-                      <Tr key={index}>
-                        <Td>{index + 1}</Td>
-                        <Td>{score.name}</Td>
-                        <Td>{formatTime(score.time)}</Td>
-                        <Td>{new Date(score.date).toLocaleDateString()}</Td>
-                      </Tr>
-                    ))}
-                </Tbody>
-              </Table>
-            </VStack>
+                ))}
+              </Tbody>
+            </Table>
           </ModalBody>
         </ModalContent>
       </Modal>
@@ -817,24 +1077,17 @@ const IsometricBoard: React.FC<Props> = ({
           <ModalHeader>New High Score!</ModalHeader>
           <ModalCloseButton />
           <ModalBody>
-            <Text mb={4}>You completed the game in {formatTime(time)}!</Text>
             <FormControl>
-              <FormLabel>Enter your initials (3 letters):</FormLabel>
+              <FormLabel>Enter your name:</FormLabel>
               <Input
                 value={playerName}
-                onChange={(e) => setPlayerName(e.target.value.slice(0, 3))}
-                placeholder="AAA"
-                maxLength={3}
-                textTransform="uppercase"
+                onChange={(e) => setPlayerName(e.target.value)}
+                placeholder="Your name"
               />
             </FormControl>
           </ModalBody>
           <ModalFooter>
-            <Button
-              colorScheme="blue"
-              mr={3}
-              onClick={handleNameSubmit}
-            >
+            <Button colorScheme="blue" onClick={handleNameSubmit}>
               Save Score
             </Button>
           </ModalFooter>
@@ -842,6 +1095,4 @@ const IsometricBoard: React.FC<Props> = ({
       </Modal>
     </Box>
   );
-};
-
-export default IsometricBoard;
+}

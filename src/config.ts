@@ -28,6 +28,7 @@ export const LAYOUT = {
     borderRadius: "2xl"
   },
   board: {
+    scale: 1.2,
     position: {
       x: 0,
       y: 0,
@@ -37,14 +38,18 @@ export const LAYOUT = {
       x: 0,
       y: 0,
       z: 0
-    },
-    scale: 1
+    }
   },
   camera: {
-    height: 50,
-    padding: 1.2, // 20% padding around the board
-    near: -1000,
-    far: 1000
+    height: 20,
+    padding: 2,
+    near: 0.1,
+    far: 1000,
+    rotation: {
+      x: -Math.PI / 3,
+      y: Math.PI / 4,
+      z: 0
+    }
   },
   animation: {
     duration: 0.5,

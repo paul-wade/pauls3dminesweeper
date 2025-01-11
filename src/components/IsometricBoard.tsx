@@ -21,7 +21,7 @@ import {
   Th,
   Td
 } from '@chakra-ui/react';
-import { Canvas, useThree, useFrame } from '@react-three/fiber';
+import { Canvas, useFrame, useThree, ThreeEvent } from '@react-three/fiber';
 import { 
   Stage, 
   Float, 
@@ -67,20 +67,38 @@ const mineMaterial = new THREE.MeshStandardMaterial({
 // GPU-optimized cell geometry
 const cellGeometry = new THREE.BoxGeometry(0.9, 0.3, 0.9);
 
+// Types for InstancedCells props
+interface InstancedCellsProps {
+  board: number[][];
+  revealed: boolean[][];
+  flagged: boolean[][];
+  width: number;
+  height: number;
+  handleCellClick: (x: number, y: number) => void;
+  handleCellRightClick: (e: ThreeEvent<MouseEvent>, x: number, y: number) => void;
+  gameOver: boolean;
+  bombHitPosition: { x: number; y: number } | null;
+}
+
+// Type for InstancedMesh with color attribute
+type InstancedMeshWithColor = THREE.InstancedMesh & {
+  instanceColor: THREE.InstancedBufferAttribute;
+};
+
 // Instanced Cells component
-const InstancedCells = React.memo(({ 
-  board, 
-  revealed, 
-  flagged, 
-  width, 
+const InstancedCells = React.memo(({
+  board,
+  revealed,
+  flagged,
+  width,
   height,
   handleCellClick,
   handleCellRightClick,
   gameOver,
   bombHitPosition
-}) => {
-  const instancesRef = useRef();
-  const hoveredRef = useRef(-1);
+}: InstancedCellsProps) => {
+  const instancesRef = useRef<InstancedMeshWithColor>(null);
+  const hoveredRef = useRef<number>(-1);
   const tempColor = new THREE.Color();
   const tempObject = new THREE.Object3D();
   
@@ -155,17 +173,41 @@ const InstancedCells = React.memo(({
     }
 
     instancesRef.current.instanceMatrix.needsUpdate = true;
-    if (instancesRef.current.instanceColor) 
+    if (instancesRef.current.instanceColor) {
       instancesRef.current.instanceColor.needsUpdate = true;
+    }
   });
 
-  const handlePointerOver = (e) => {
+  const handlePointerOver = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
-    hoveredRef.current = e.instanceId;
+    if (typeof e.instanceId === 'number') {
+      hoveredRef.current = e.instanceId;
+    }
   };
 
   const handlePointerOut = () => {
     hoveredRef.current = -1;
+  };
+
+  const handleClick = (e: ThreeEvent<MouseEvent>) => {
+    e.stopPropagation();
+    if (typeof e.instanceId !== 'number') return;
+    
+    const x = e.instanceId % width;
+    const y = Math.floor(e.instanceId / width);
+    handleCellClick(x, y);
+  };
+
+  const handleContextMenu = (e: ThreeEvent<MouseEvent>) => {
+    if (e.nativeEvent) {
+      e.nativeEvent.preventDefault();
+      e.nativeEvent.stopPropagation();
+    }
+    if (typeof e.instanceId !== 'number') return;
+    
+    const x = e.instanceId % width;
+    const y = Math.floor(e.instanceId / width);
+    handleCellRightClick(e, x, y);
   };
 
   const getNumberColor = (value: number) => {
@@ -180,29 +222,6 @@ const InstancedCells = React.memo(({
       '#795548'  // 8: Brown
     ];
     return colors[value - 1] || '#000000';
-  };
-
-  const handleClick = (e) => {
-    e.stopPropagation();
-    if (e.instanceId === undefined) return;
-    
-    const x = e.instanceId % width;
-    const y = Math.floor(e.instanceId / width);
-    handleCellClick(x, y);
-  };
-
-  const handleContextMenu = (e: ThreeEvent<MouseEvent>) => {
-    if (e.nativeEvent) {
-      e.nativeEvent.preventDefault();
-      e.nativeEvent.stopPropagation();
-    }
-    
-    // Check if the event has instance data
-    if (typeof e.instanceId !== 'number') return;
-    
-    const x = e.instanceId % width;
-    const y = Math.floor(e.instanceId / width);
-    handleCellRightClick(e, x, y);
   };
 
   return (
@@ -448,29 +467,14 @@ export default function IsometricBoard({ initialWidth = 8, initialHeight = 8, in
   const cameraRef = React.createRef<THREE.PerspectiveCamera>();
 
   const updateCameraFrustum = React.useCallback(() => {
-    if (!cameraRef.current) return;
-
-    const camera = cameraRef.current;
-    const aspect = window.innerWidth / window.innerHeight;
+    const { camera, gl } = useThree();
+    const container = gl.domElement;
+    const aspect = container.clientWidth / container.clientHeight;
     const boardSize = Math.max(width, height);
-    const frustumSize = boardSize * 1.5;
+    const distance = boardSize * 2;
 
-    camera.left = -frustumSize * aspect / 2;
-    camera.right = frustumSize * aspect / 2;
-    camera.top = frustumSize / 2;
-    camera.bottom = -frustumSize / 2;
-    camera.near = 0.1;
-    camera.far = 1000;
-    camera.position.set(
-      20,
-      20,
-      20
-    );
-    camera.rotation.set(
-      0,
-      0,
-      0
-    );
+    camera.position.set(distance, distance, distance);
+    camera.lookAt(0, 0, 0);
     camera.updateProjectionMatrix();
   }, [width, height]);
 
@@ -665,7 +669,7 @@ export default function IsometricBoard({ initialWidth = 8, initialHeight = 8, in
 
   useEffect(() => {
     if (!gameOver) {
-      setBombHitPosition(undefined);
+      setBombHitPosition(null);
     }
   }, [gameOver]);
 
@@ -699,16 +703,16 @@ export default function IsometricBoard({ initialWidth = 8, initialHeight = 8, in
 
   // Camera controller component
   const CameraController: React.FC<{ width: number; height: number }> = ({ width, height }) => {
-    const { camera } = useThree();
+    const { camera, gl } = useThree();
     
     useEffect(() => {
-      const maxDimension = Math.max(width, height);
-      const baseDistance = 20;
-      const distance = baseDistance * (maxDimension / 8);
-      const cameraHeight = distance * 0.8;
-      
-      camera.position.set(distance, cameraHeight, distance);
-      camera.lookAt(width / 2 - 0.5, 0, height / 2 - 0.5); // Center on board
+      const container = gl.domElement;
+      const aspect = container.clientWidth / container.clientHeight;
+      const boardSize = Math.max(width, height);
+      const distance = boardSize * 2;
+
+      camera.position.set(distance, distance, distance);
+      camera.lookAt(0, 0, 0);
       camera.updateProjectionMatrix();
     }, [camera, width, height]);
 
@@ -1004,6 +1008,7 @@ export default function IsometricBoard({ initialWidth = 8, initialHeight = 8, in
           maxDistance={50}
           minDistance={5}
         />
+        <CameraController width={width} height={height} />
       </Canvas>
 
       {/* High Scores Modal */}

@@ -141,7 +141,8 @@ const ProfessionalBackground: React.FC = () => {
       position="fixed"
       right="0"
       top="0"
-      width={isExpanded ? "400px" : "auto"}
+      width={isExpanded ? "400px" : "300px"}
+      minW="300px"
       p={4}
       bg="rgba(0, 0, 0, 0.85)"
       backdropFilter="blur(10px)"
@@ -149,23 +150,77 @@ const ProfessionalBackground: React.FC = () => {
       borderBottom="1px solid rgba(255, 255, 255, 0.18)"
       borderBottomLeftRadius="xl"
       zIndex={2}
-      transition="all 0.3s ease"
-      _hover={{ bg: "rgba(0, 0, 0, 0.9)" }}
-      onClick={() => !isExpanded && setIsExpanded(true)}
+      outline="none"
+      userSelect="none"
+      overflow="hidden"
+      whiteSpace="nowrap"
+      cursor="default"
+      sx={{
+        WebkitTapHighlightColor: 'transparent',
+        '&::selection': { background: 'transparent' },
+        '& *::selection': { background: 'transparent' },
+        '&:focus': { outline: 'none' },
+        '& *:focus': { outline: 'none' },
+        caretColor: 'transparent',
+        '& *': {
+          caretColor: 'transparent',
+          contentEditable: 'false',
+          WebkitUserModify: 'read-only'
+        }
+      }}
+      contentEditable="false"
+      suppressContentEditableWarning={true}
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={(e) => {
+        e.preventDefault();
+        if (!isExpanded) setIsExpanded(true);
+      }}
     >
       <VStack align="stretch" spacing={4}>
-        <HStack justify="space-between" cursor="pointer" onClick={(e) => {
-          e.stopPropagation();
-          setIsExpanded(!isExpanded);
-        }}>
+        <HStack 
+          justify="space-between" 
+          cursor="pointer" 
+          userSelect="none"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsExpanded(!isExpanded);
+          }}
+        >
           <VStack align="start" spacing={0}>
-            <Heading size="md" color="white">Paul Wade</Heading>
-            <Text fontSize="sm" color="whiteAlpha.900">Senior Technology Engineer</Text>
-            {!isExpanded && (
-              <Text fontSize="xs" color="whiteAlpha.800">
-                Leadership | System Design | Engineering | Cloud
-              </Text>
-            )}
+            <Heading 
+              size="md" 
+              color="white"
+              sx={{
+                caretColor: 'transparent',
+                cursor: 'default',
+                '&:focus': { outline: 'none' },
+                '&::selection': { background: 'transparent' }
+              }}
+            >Paul Wade</Heading>
+            <Text 
+              fontSize="sm" 
+              color="whiteAlpha.900"
+              sx={{
+                caretColor: 'transparent',
+                cursor: 'default',
+                '&:focus': { outline: 'none' },
+                '&::selection': { background: 'transparent' }
+              }}
+            >Senior Technology Engineer</Text>
+            <Text 
+              fontSize="xs" 
+              color="whiteAlpha.800"
+              opacity={isExpanded ? 0.7 : 1}
+              sx={{
+                caretColor: 'transparent',
+                cursor: 'default',
+                '&:focus': { outline: 'none' },
+                '&::selection': { background: 'transparent' }
+              }}
+            >
+              Leadership | System Design | Engineering | Cloud
+            </Text>
           </VStack>
           <Icon
             as={isExpanded ? ChevronDownIcon : ChevronUpIcon}

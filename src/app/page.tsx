@@ -10,9 +10,20 @@ export default function Home() {
     <ChakraProvider>
       <Box 
         position="relative" 
-        minHeight="100vh"
+        height="100vh"
         bgGradient="linear(to-br, purple.600, blue.400)"
         overflow="hidden"
+        py={2}
+        sx={{
+          caretColor: 'transparent',
+          userSelect: 'none',
+          '*': {
+            caretColor: 'transparent',
+            userSelect: 'none'
+          }
+        }}
+        _focus={{ outline: 'none' }}
+        tabIndex={-1}
       >
         {/* Animated background shapes */}
         <Box
@@ -20,7 +31,7 @@ export default function Home() {
           top="-20%"
           left="-20%"
           width="140%"
-          height="140%"
+          height="120%"
           zIndex={0}
           sx={{
             '&::before, &::after': {
@@ -49,14 +60,23 @@ export default function Home() {
           }}
         />
 
-        <ProfessionalBackground />
+        <Box 
+          sx={{
+            caretColor: 'transparent',
+            userSelect: 'none',
+            pointerEvents: 'none',
+            '& > *': { pointerEvents: 'auto' }
+          }}
+        >
+          <ProfessionalBackground />
+        </Box>
         
         <Box 
           as="main" 
           position="relative"
           zIndex={1}
-          minHeight="100vh" 
-          p={8} 
+          height="100%" 
+          p={4} 
           display="flex" 
           flexDirection="column" 
           alignItems="center" 
@@ -66,6 +86,7 @@ export default function Home() {
             height={LAYOUT.mainContainer.height}
             width="85%"
             maxWidth="1800px"
+            maxHeight="90vh"
             bg={LAYOUT.mainContainer.background}
             backdropFilter={`blur(${LAYOUT.mainContainer.backdropBlur})`}
             borderRadius={LAYOUT.mainContainer.borderRadius}
@@ -81,6 +102,9 @@ export default function Home() {
             <Box
               position="relative"
               height="100%"
+              width="100%"
+              overflow="hidden"
+              p={0}
               _before={{
                 content: '""',
                 position: 'absolute',

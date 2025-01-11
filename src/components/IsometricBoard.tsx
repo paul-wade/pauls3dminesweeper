@@ -23,7 +23,6 @@ import {
 } from '@chakra-ui/react';
 import { Canvas, useFrame, useThree, ThreeEvent } from '@react-three/fiber';
 import { 
-  Stage, 
   Float, 
   Center, 
   Text, 
@@ -466,8 +465,12 @@ export default function IsometricBoard({ initialWidth = 8, initialHeight = 8, in
   // Camera controller component
   const CameraController: React.FC<{ width: number; height: number }> = ({ width, height }) => {
     const { camera, gl } = useThree();
+    const initializedRef = useRef(false);
     
     useEffect(() => {
+      if (initializedRef.current) return;
+      initializedRef.current = true;
+      
       const container = gl.domElement;
       const aspect = container.clientWidth / container.clientHeight;
       const boardSize = Math.max(width, height);
@@ -786,10 +789,11 @@ export default function IsometricBoard({ initialWidth = 8, initialHeight = 8, in
   return (
     <Box
       w="100%"
-      h="800px"
+      h="100%"
       position="relative"
       bg="linear-gradient(135deg, #1a1c20 0%, #2d3436 100%)"
-      p={8}
+      p={0}
+      overflow="hidden"
     >
       <Canvas
         dpr={[1, 2]}
@@ -800,187 +804,165 @@ export default function IsometricBoard({ initialWidth = 8, initialHeight = 8, in
           stencil: false,
           depth: true,
         }}
-        camera={{
-          fov: 50,
+        camera={{ 
+          fov: 45,
+          position: [20, 20, 20],
           near: 0.1,
-          far: 1000,
-          position: [20, 20, 20]
+          far: 1000
         }}
       >
-        <color attach="background" args={['#000000']} />
+        <color attach="background" args={['#1a1c20']} />
         <Stars radius={300} depth={100} count={10000} factor={6} saturation={0.5} fade speed={0.5} />
-        <ambientLight intensity={0.3} />
-        <pointLight position={[10, 10, 10]} intensity={0.4} color="#4a90e2" />
-        <pointLight position={[-10, 10, -10]} intensity={0.4} color="#4a90e2" />
         
-        <Stage
-          intensity={0.4}
-          preset="rembrandt"
-          adjustCamera={false}
-          environment={null}
-        >
-          {/* Game Title */}
-          <group position={[0, 12, -12]}>
-            <Float
-              speed={2}
-              rotationIntensity={0.2}
-              floatIntensity={0.5}
-              floatingRange={[-0.1, 0.1]}
-            >
-              <Text
-                position={[0, 0, 0]}
-                fontSize={2.5}
-                color="#4A90E2"
-                anchorX="center"
-                anchorY="middle"
-                renderOrder={2}
-                material-toneMapped={false}
-              >
-                Minesweeper 3D
-              </Text>
-            </Float>
-          </group>
+        {/* Lighting */}
+        <ambientLight intensity={0.4} />
+        <directionalLight 
+          position={[10, 10, 5]} 
+          intensity={0.6} 
+          castShadow 
+          shadow-mapSize={[1024, 1024]}
+        />
+        <pointLight position={[-10, -10, -10]} intensity={0.2} />
+        <Environment preset="city" />
 
-          {/* Difficulty Buttons */}
-          <group position={[0, 8, -10]}>
-            <group position={[-10, 0, 0]} rotation={[0, 0.2, 0]}>
-              <Text
-                position={[0, 0, 0]}
-                fontSize={1}
-                color={difficulty === 'easy' ? "#4CAF50" : "#888888"}
-                anchorX="center"
-                anchorY="middle"
-                onClick={() => handleDifficultyChange('easy')}
-                renderOrder={2}
-                material-toneMapped={false}
-              >
-                Easy (8×8)
-              </Text>
-            </group>
-            <group position={[0, 0, -1]}>
-              <Text
-                position={[0, 0, 0]}
-                fontSize={1}
-                color={difficulty === 'medium' ? "#2196F3" : "#888888"}
-                anchorX="center"
-                anchorY="middle"
-                onClick={() => handleDifficultyChange('medium')}
-                renderOrder={2}
-                material-toneMapped={false}
-              >
-                Medium (16×16)
-              </Text>
-            </group>
-            <group position={[10, 0, 0]} rotation={[0, -0.2, 0]}>
-              <Text
-                position={[0, 0, 0]}
-                fontSize={1}
-                color={difficulty === 'hard' ? "#9C27B0" : "#888888"}
-                anchorX="center"
-                anchorY="middle"
-                onClick={() => handleDifficultyChange('hard')}
-                renderOrder={2}
-                material-toneMapped={false}
-              >
-                Hard (24×24)
-              </Text>
-            </group>
-          </group>
-
-          {/* Game Stats */}
-          <group position={[0, 6, -8]}>
-            <Text
-              position={[-8, 0, 0]}
-              fontSize={1}
-              color="#FF4136"
-              anchorX="center"
-              anchorY="middle"
-              renderOrder={2}
-              material-toneMapped={false}
-            >
-              {`MINES: ${mines}`}
-            </Text>
+        {/* Game UI */}
+        <group position={[0, 8, -10]}>
+          <group position={[-10, 0, 0]} rotation={[0, 0.2, 0]}>
             <Text
               position={[0, 0, 0]}
               fontSize={1}
-              color="#4CAF50"
+              color={difficulty === 'easy' ? "#4CAF50" : "#888888"}
               anchorX="center"
               anchorY="middle"
+              onClick={() => handleDifficultyChange('easy')}
               renderOrder={2}
               material-toneMapped={false}
             >
-              {`FLAGS: ${flagged.flat().filter(Boolean).length}`}
-            </Text>
-            <Text
-              position={[8, 0, 0]}
-              fontSize={1}
-              color="#FFA500"
-              anchorX="center"
-              anchorY="middle"
-              renderOrder={2}
-              material-toneMapped={false}
-            >
-              {`TIME: ${formatTime(time)}`}
+              Easy (8×8)
             </Text>
           </group>
-
-          {/* High Scores and Restart buttons */}
-          <group position={[-15, 2, -4]} rotation={[0, Math.PI / 6, 0]}>
+          <group position={[0, 0, -1]}>
             <Text
               position={[0, 0, 0]}
               fontSize={1}
-              color="#FFD700"
+              color={difficulty === 'medium' ? "#2196F3" : "#888888"}
               anchorX="center"
               anchorY="middle"
-              onClick={onHighScoresOpen}
+              onClick={() => handleDifficultyChange('medium')}
               renderOrder={2}
               material-toneMapped={false}
             >
-              High Scores
+              Medium (16×16)
             </Text>
           </group>
-          <group position={[15, 2, -4]} rotation={[0, -Math.PI / 6, 0]}>
+          <group position={[10, 0, 0]} rotation={[0, -0.2, 0]}>
             <Text
               position={[0, 0, 0]}
-              fontSize={1.2}
-              color="#4A90E2"
+              fontSize={1}
+              color={difficulty === 'hard' ? "#9C27B0" : "#888888"}
               anchorX="center"
               anchorY="middle"
-              onClick={restartGame}
+              onClick={() => handleDifficultyChange('hard')}
               renderOrder={2}
               material-toneMapped={false}
             >
-              Restart Game
+              Hard (24×24)
             </Text>
           </group>
+        </group>
 
-          {/* Game Board */}
-          <Float
-            speed={1}
-            rotationIntensity={0}
-            floatIntensity={0.1}
-            floatingRange={[-0.05, 0.05]}
+        {/* Game Stats */}
+        <group position={[0, 6, -8]}>
+          <Text
+            position={[-8, 0, 0]}
+            fontSize={1}
+            color="#FF4136"
+            anchorX="center"
+            anchorY="middle"
+            renderOrder={2}
+            material-toneMapped={false}
           >
-            <group position={[3, 0, 0]} scale={8/Math.max(width, height)}>
-              <group position={[-width/2, 0, -height/2]}>
-                <InstancedCells
-                  board={board}
-                  revealed={revealed}
-                  flagged={flagged}
-                  width={width}
-                  height={height}
-                  handleCellClick={handleCellClick}
-                  handleCellRightClick={handleCellRightClick}
-                  gameOver={gameOver}
-                  bombHitPosition={bombHitPosition}
-                />
-              </group>
-            </group>
-          </Float>
+            {`MINES: ${mines}`}
+          </Text>
+          <Text
+            position={[0, 0, 0]}
+            fontSize={1}
+            color="#4CAF50"
+            anchorX="center"
+            anchorY="middle"
+            renderOrder={2}
+            material-toneMapped={false}
+          >
+            {`FLAGS: ${flagged.flat().filter(Boolean).length}`}
+          </Text>
+          <Text
+            position={[8, 0, 0]}
+            fontSize={1}
+            color="#FFA500"
+            anchorX="center"
+            anchorY="middle"
+            renderOrder={2}
+            material-toneMapped={false}
+          >
+            {`TIME: ${formatTime(time)}`}
+          </Text>
+        </group>
 
-          <BakeShadows />
-          <CameraController width={width} height={height} />
-        </Stage>
+        {/* High Scores and Restart buttons */}
+        <group position={[-15, 2, -4]} rotation={[0, Math.PI / 6, 0]}>
+          <Text
+            position={[0, 0, 0]}
+            fontSize={1}
+            color="#FFD700"
+            anchorX="center"
+            anchorY="middle"
+            onClick={onHighScoresOpen}
+            renderOrder={2}
+            material-toneMapped={false}
+          >
+            High Scores
+          </Text>
+        </group>
+        <group position={[15, 2, -4]} rotation={[0, -Math.PI / 6, 0]}>
+          <Text
+            position={[0, 0, 0]}
+            fontSize={1.2}
+            color="#4A90E2"
+            anchorX="center"
+            anchorY="middle"
+            onClick={restartGame}
+            renderOrder={2}
+            material-toneMapped={false}
+          >
+            Restart Game
+          </Text>
+        </group>
+
+        {/* Game Board */}
+        <Float
+          speed={1}
+          rotationIntensity={0}
+          floatIntensity={0.1}
+          floatingRange={[-0.05, 0.05]}
+        >
+          <group position={[3, 0, 0]} scale={8/Math.max(width, height)}>
+            <group position={[-width/2, 0, -height/2]}>
+              <InstancedCells
+                board={board}
+                revealed={revealed}
+                flagged={flagged}
+                width={width}
+                height={height}
+                handleCellClick={handleCellClick}
+                handleCellRightClick={handleCellRightClick}
+                gameOver={gameOver}
+                bombHitPosition={bombHitPosition}
+              />
+            </group>
+          </group>
+        </Float>
+
+        <BakeShadows />
         <OrbitControls 
           enableZoom={true} 
           enablePan={true} 

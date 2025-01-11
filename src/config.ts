@@ -15,8 +15,8 @@ export const LAYOUT = {
     }
   },
   mainContainer: {
-    height: "1000px",  // Height of the main glass container
-    padding: "2.5rem",
+    height: "700px",  // Further reduced height to fit viewport
+    padding: "1.5rem",
     borderRadius: "2xl",
     backdropBlur: "20px",
     background: "rgba(255, 255, 255, 0.1)",
@@ -28,7 +28,7 @@ export const LAYOUT = {
     borderRadius: "2xl"
   },
   board: {
-    scale: 1.2,
+    scale: 0.9,
     position: {
       x: 0,
       y: 0,
@@ -41,8 +41,8 @@ export const LAYOUT = {
     }
   },
   camera: {
-    height: 20,
-    padding: 2,
+    height: 18,
+    padding: 1.5,
     near: 0.1,
     far: 1000,
     rotation: {

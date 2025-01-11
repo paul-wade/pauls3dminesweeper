@@ -33,7 +33,9 @@ import {
   Instance,
   Instances,
   useGLTF,
-  OrthographicCamera
+  OrthographicCamera,
+  Environment,
+  Stars
 } from '@react-three/drei';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
@@ -827,15 +829,17 @@ export default function IsometricBoard() {
           position: [20, 20, 20]
         }}
       >
-        <color attach="background" args={['#1a1c20']} />
-        <ambientLight intensity={0.5} />
-        <pointLight position={[10, 10, 10]} intensity={0.5} />
-        <pointLight position={[-10, 10, -10]} intensity={0.5} />
+        <color attach="background" args={['#000000']} />
+        <Stars radius={300} depth={100} count={10000} factor={6} saturation={0.5} fade speed={0.5} />
+        <ambientLight intensity={0.3} />
+        <pointLight position={[10, 10, 10]} intensity={0.4} color="#4a90e2" />
+        <pointLight position={[-10, 10, -10]} intensity={0.4} color="#4a90e2" />
         
         <Stage
-          intensity={0.5}
+          intensity={0.4}
           preset="rembrandt"
           adjustCamera={false}
+          environment={null}
         >
           {/* Game Title */}
           <group position={[0, 12, -12]}>
